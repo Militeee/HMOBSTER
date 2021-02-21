@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/mobster_hierarchical.iml" filepath="$PROJECT_DIR$/.idea/mobster_hierarchical.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/hmobster.iml" filepath="$PROJECT_DIR$/.idea/hmobster.iml" />
     </modules>
   </component>
 </project>

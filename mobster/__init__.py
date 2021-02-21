@@ -9,3 +9,4 @@ from mobster.model_selection_mobster import *
 from mobster.example_loading import *
 from mobster.plotting_mobster import *
 from mobster.stopping_criteria import *
+from mobster.likelihood_calculation import *

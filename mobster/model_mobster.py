@@ -7,6 +7,7 @@ from mobster.likelihood_calculation import *
 @config_enumerate
 def model(data, K=1, tail=1, purity=0.96, alpha_prior_sd=0.3, number_of_trials_clonal_mean=500., number_of_trials_k=300.,
          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.]):
+
     """Hierarchical bayesian model for Subclonal Deconvolution from VAF
 
     This model deconvolves the signal from the Variant Allelic Frequency spectrum.
