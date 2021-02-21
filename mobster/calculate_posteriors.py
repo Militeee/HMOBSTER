@@ -8,5 +8,5 @@ def retrieve_posterior_probs(data, parameters, tail):
         lks_k = lks[k]
         norm_fact = log_sum_exp(lks_k)
         res[k] = torch.exp(lks_k - norm_fact)
-    parameters["posteriors"] = res
+    parameters["cluster_probs"] = res
     return parameters

@@ -1,4 +1,6 @@
 from mobster.utils_mobster import *
+import torch
+import pyro.distributions as dist
 
 def beta_lk(beta_a, beta_b, weights, K, data):
     lk = torch.ones(K, len(data))
@@ -9,10 +11,13 @@ def beta_lk(beta_a, beta_b, weights, K, data):
     return lk
 
 def final_lk(pareto, beta, weights):
-    lk = torch.ones(1 + beta.shape[0], beta.shape[1])
+    if len(beta.shape) == 1:
+        dim0, dim1 = 1,beta.shape[0]
+    else:
+        dim0, dim1 = beta.shape[0], beta.shape[1]
+    lk = torch.ones(1 + dim0, dim1)
     lk[0, :] = torch.log(weights[0]) + pareto
-    lk[1:(1 + beta.shape[1]), :] = torch.log(weights[1]) + beta
-    print(lk.shape)
+    lk[1:(1 + dim1), :] = torch.log(weights[1]) + beta
     return lk
 
 def compute_likelihood_from_params(data, params, tail, tsum = True):
@@ -25,7 +30,7 @@ def compute_likelihood_from_params(data, params, tail, tsum = True):
         lk = [None] * len(theoretical_num_clones)
     for i,k in enumerate(data):
 
-        if tail:
+        if tail == 1:
             tmp = compute_likelihood_from_params_tail(data[k], params, i, theoretical_num_clones, clones_count)
             if tsum:
                 tmp = log_sum_exp(tmp)

@@ -1,5 +1,6 @@
 import pyro as pyro
 from pyro.infer import config_enumerate
+import torch
 from mobster.likelihood_calculation import *
 
 
@@ -130,7 +131,7 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_sd=0.3, number_of_trials_c
                                    weights_2, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
                     pareto = dist.Pareto(torch.min(data[karyos[kr]]) - 1e-5, alpha).log_prob(data[karyos[kr]])
-                    pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs))).sum()
+                    pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
 
                 else:
@@ -139,7 +140,7 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_sd=0.3, number_of_trials_c
                                    weights_1, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
                     pareto = dist.Pareto(torch.min(data[karyos[kr]]) - 1e-5, alpha).log_prob(data[karyos[kr]])
-                    pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs))).sum()
+                    pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
             else:
 
