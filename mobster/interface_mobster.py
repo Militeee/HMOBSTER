@@ -25,7 +25,11 @@ def fit_mobster(data, K, tail=1, purity=0.96, alpha_prior_sd=0.5, number_of_tria
                      optim=pyro.optim.Adam({"lr": lr}),
                      loss=pyro.infer.TraceGraph_ELBO())
 
-    print('Running MOBSTER on {} karyotypes.'.format(len(data)), flush=True)
+    print('Running MOBSTER on {} karyotypes with {} subclones.'.format(len(data), K), flush=True)
+    if tail == 1:
+        print("Fitting a model with tail", flush = True)
+    else:
+        print("Fitting a model without tail", flush=True)
     params = {
         'K' : K,
         'tail' : tail,

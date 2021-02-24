@@ -85,10 +85,10 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_sd=0.3, number_of_trials_c
 
                 # Subclonal clusters are initialized halfway between zero and the smallest clonal cluster
                 #TODO if K > 1 don't inizialize everything on the same pick
-                k_means = [(torch.min(theoretical_clonal_means[kr] - 0.05) / 2).tolist()] * K
+                k_means = (torch.min(theoretical_clonal_means[kr] - 0.05) / K) * torch.arange(1,K+1)
                 # Number of sucessful trials for beta means prior
                 bm_12 = torch.tensor(
-                    flatten_list([theoretical_clonal_means[kr].tolist(), k_means])) * number_of_trials_clonal_mean
+                    flatten_list([theoretical_clonal_means[kr].tolist(), k_means.tolist()])) * number_of_trials_clonal_mean
                 # Number of unsucessful trials for beta means prior
                 bm_22 = number_of_trials_clonal_mean - bm_12
                 # As we are writing a bayesian model, beta clonal means prior are actually around
@@ -108,9 +108,9 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_sd=0.3, number_of_trials_c
             # Maybe to rewrite using only numpy arrays and not lists
             with pyro.plate("clones_{}".format(kr), 1 + K):
 
-                k_means = [(theoretical_clonal_means[kr] - 0.05) / 2] * K
+                k_means = (theoretical_clonal_means[kr] - 0.05) / K *  torch.arange(1,K+1)
                 bm_11 = torch.tensor(
-                    flatten_list([theoretical_clonal_means[kr], k_means])) * number_of_trials_clonal_mean
+                    flatten_list([theoretical_clonal_means[kr], k_means.tolist()])) * number_of_trials_clonal_mean
                 bm_21 = number_of_trials_clonal_mean - bm_11
                 betas_subclone_mean = pyro.sample('beta_clone_mean_{}'.format(kr), dist.Beta(bm_11, bm_21))
                 bns_11 = torch.tensor((1 * [prior_lims_clonal[0]]) + (K * [prior_lims_k[0]]))
