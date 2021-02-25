@@ -77,11 +77,11 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
     res = {"cluster_probs" : params["cluster_probs"][k].detach().numpy(),
            "cluster_assignments" : np.argmax(params["cluster_probs"][k].detach().numpy(), axis = 0),
            "mixture_probs" : mixture_weights,
-          "beta_concentration1" : beta_concentration1,
-          "beta_concetration2" : beta_concentration2
+          "beta_concentration1" : beta_concentration1.detach().numpy(),
+          "beta_concentration2" : beta_concentration2.detach().numpy()
         }
     if tail == 1:
-        res["tail_shape"] = params['ap']
+        res["tail_shape"] = params['ap'].detach().numpy()
         res["tail_scale"] = np.min(data[k].detach().numpy())
 
     return res
