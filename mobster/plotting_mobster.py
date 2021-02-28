@@ -17,6 +17,7 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 10,
     for i, kr in enumerate(data):
 
         axs[i].hist(data[kr].detach().numpy(), bins=bins, density=True, alpha=0.48)
+        axs[i].title.set_text("Karyotype = " + kr)
         params = all_params[kr]
 
         karyos = list(data.keys())

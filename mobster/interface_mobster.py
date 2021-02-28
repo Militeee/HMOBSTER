@@ -15,7 +15,7 @@ import mobster.model_selection_mobster as ms
 from mobster.calculate_posteriors import *
 
 def fit_mobster(data, K, tail=1, purity=0.96, alpha_prior_sd=0.5, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
-         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = ELBO_stopping_criteria, lr = 0.05, max_it = 5000, e = 0.01):
+         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = ELBO_stopping_criteria, lr = 0.05, max_it = 5000, e = 0.001):
 
     model = mobster.model
     guide = mobster.guide
@@ -40,7 +40,7 @@ def fit_mobster(data, K, tail=1, purity=0.96, alpha_prior_sd=0.5, number_of_tria
         'prior_lims_clonal' : prior_lims_clonal,
         'prior_lims_k' : prior_lims_k
     }
-    run(data, params, svi, stopping, max_it, e)
+    loss = run(data, params, svi, stopping, max_it, e)
 
     params_dict = retrieve_params()
 
@@ -68,7 +68,8 @@ def fit_mobster(data, K, tail=1, purity=0.96, alpha_prior_sd=0.5, number_of_tria
     final_dict = {
         "information_criteria" : information_dict,
         "model_parameters" : params_dict,
-        "run_parameters" : params
+        "run_parameters" : params,
+        "loss": np.array(loss)
     }
     print("Done!", flush = True)
 
@@ -91,15 +92,14 @@ def run(data, params, svi, stopping, max_it, e):
         t.refresh()
 
         loss = svi.step(**data_dict)
-        losses.append(loss)
+        losses.append(loss / N)
 
         old, new = new, loss
 
         if stopping(old, new, e):
-            continue
+            break
 
-
-
+    return losses
 
 def retrieve_params():
     param_names = pyro.get_param_store()
