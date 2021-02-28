@@ -1,15 +1,19 @@
 from scipy.stats import beta, pareto
-import matplotlib.patches as mpatches
+
+import matplotlib as mpl
+mpl.use('Agg')
+
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import numpy as np
 
 
-def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 10, fig_width = 8,tail=True):
+def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 10, fig_width = 8):
 
     all_params = inf_res["model_parameters"]
     plt.rcParams["figure.figsize"] = (fig_height, fig_width)
     tail = inf_res['run_parameters']['tail']
-    fig, axs = plt.subplots(3)
+    fig, axs = plt.subplots(len(all_params))
     for i, kr in enumerate(data):
 
         axs[i].hist(data[kr].detach().numpy(), bins=bins, density=True, alpha=0.48)
