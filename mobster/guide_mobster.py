@@ -8,7 +8,7 @@ import torch
 from torch.distributions import constraints
 
 @config_enumerate
-def guide(data, K=1, tail=1, purity=0.96, clonal_beta_var=1., alpha_prior_sd=0.3, number_of_trials_clonal_mean=100.,
+def guide(data, K=1, tail=1, purity=0.96, clonal_beta_var=1., alpha_prior_concentration = 5, alpha_prior_rate = 10, number_of_trials_clonal_mean=100.,
           number_of_trials_clonal=900., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],
           prior_lims_k=[1., 10000.]):
     """
@@ -39,9 +39,13 @@ def guide(data, K=1, tail=1, purity=0.96, clonal_beta_var=1., alpha_prior_sd=0.3
     index_2 = [i for i, j in enumerate(theoretical_num_clones) if j == 2]
     index_1 = [i for i, j in enumerate(theoretical_num_clones) if j == 1]
 
-    ap = pyro.param("ap", torch.tensor(1.5), constraint=constraints.interval(0.5, 5))
+    a_prior = pyro.param("tail_mean", torch.tensor(1.5), constraint=constraints.interval(0.5, 5))
+    sd_prior = pyro.param("tail_sd",dist.Gamma(concentration=alpha_prior_concentration, rate=alpha_prior_rate).mean, constraint=constraints.positive)
 
-    alpha_prior = pyro.sample('u', dist.Delta(ap))
+    alpha_prior_sd = pyro.sample('sd_tail', dist.Delta(sd_prior))
+
+
+    alpha_prior = pyro.sample('u', dist.Delta(a_prior))
 
     idx1 = 0
     idx2 = 0

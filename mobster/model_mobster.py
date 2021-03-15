@@ -6,7 +6,7 @@ from mobster.likelihood_calculation import *
 
 
 @config_enumerate
-def model(data, K=1, tail=1, purity=0.96, alpha_prior_sd=0.3, number_of_trials_clonal_mean=500., number_of_trials_k=300.,
+def model(data, K=1, tail=1, purity=0.96, alpha_prior_concentration = 5, alpha_prior_rate = 10, number_of_trials_clonal_mean=500., number_of_trials_k=300.,
          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.]):
 
     """Hierarchical bayesian model for Subclonal Deconvolution from VAF
@@ -66,6 +66,8 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_sd=0.3, number_of_trials_c
 
     # Prior over the mean of the alphas
     alpha_prior = pyro.sample('u', dist.Uniform(0.5, 5))
+
+    alpha_prior_sd = pyro.sample('sd_tail', dist.Gamma(concentration=alpha_prior_concentration, rate=alpha_prior_rate))
 
     # We enter the karyotype plate
     # We may think about tensorizing it

@@ -61,7 +61,7 @@ def compute_likelihood_from_params_tail(data, params, i, theo_clones, counts_clo
                        params['param_weights_{}'.format(theo_clones[i])][j, :],
                        len(params['a_2'][:, j]),
                        data)
-        pareto = dist.Pareto(torch.min(data) - 1e-5, params['ap']).log_prob(data)
+        pareto = dist.Pareto(torch.min(data) - 1e-5, params['tail_mean']).log_prob(data)
         lk = final_lk(pareto, beta, params['param_tail_weights'][i, :])
     else:
         beta = beta_lk(params['a_1'][:, j] * params['b_1'][:, j],
@@ -69,7 +69,7 @@ def compute_likelihood_from_params_tail(data, params, i, theo_clones, counts_clo
                        params['param_weights_{}'.format(theo_clones[i])][j,:],
                        len(params['a_1'][:, j]),
                        data)
-        pareto = dist.Pareto(torch.min(data) - 1e-5, params['ap']).log_prob(data)
+        pareto = dist.Pareto(torch.min(data) - 1e-5, params['tail_mean']).log_prob(data)
         lk = final_lk(pareto, beta, params['param_tail_weights'][i, :])
     return lk
 

@@ -14,7 +14,7 @@ from mobster.stopping_criteria import *
 import mobster.model_selection_mobster as ms
 from mobster.calculate_posteriors import *
 
-def fit_mobster(data, K, tail=1, purity=0.96, alpha_prior_sd=0.5, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
+def fit_mobster(data, K, tail=1, purity=0.96,alpha_prior_concentration = 5, alpha_prior_rate = 10, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = ELBO_stopping_criteria, lr = 0.05, max_it = 5000, e = 0.001):
 
     model = mobster.model
@@ -34,7 +34,8 @@ def fit_mobster(data, K, tail=1, purity=0.96, alpha_prior_sd=0.5, number_of_tria
         'K' : K,
         'tail' : tail,
         'purity' : purity,
-        'alpha_prior_sd' : alpha_prior_sd,
+        'alpha_prior_concentration' : alpha_prior_concentration,
+        'alpha_prior_rate' : alpha_prior_rate,
         'number_of_trials_clonal_mean' : number_of_trials_clonal_mean,
         'number_of_trials_k' : number_of_trials_k,
         'prior_lims_clonal' : prior_lims_clonal,

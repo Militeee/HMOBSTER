@@ -81,7 +81,8 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
           "beta_concentration2" : beta_concentration2.detach().numpy()
         }
     if tail == 1:
-        res["tail_shape"] = params['ap'].detach().numpy()
+        res["tail_shape"] = params['tail_mean'].detach().numpy()
         res["tail_scale"] = np.min(data[k].detach().numpy())
+        res["tail_shape_sd"] = params['tail_sd'].detach().numpy()
 
     return res
