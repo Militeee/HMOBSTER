@@ -138,7 +138,7 @@ def model(data, K=1, tail=1, purity=0.96,  number_of_trials_clonal_mean=500., nu
                                    (1 - betas_subclone_mean2) * betas_subclone_n_samples2,
                                    weights_2, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
-                    pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
+                    pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amax(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
 
@@ -147,7 +147,7 @@ def model(data, K=1, tail=1, purity=0.96,  number_of_trials_clonal_mean=500., nu
                                    (1 - betas_subclone_mean) * betas_subclone_n_samples,
                                    weights_1, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
-                    pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
+                    pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amax(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
             else:
