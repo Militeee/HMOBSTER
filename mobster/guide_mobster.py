@@ -67,7 +67,7 @@ def guide(data, K=1, tail=1, purity=0.96, clonal_beta_var=1., number_of_trials_c
             k2 = torch.cat([theoretical_clonal_means[kr] for kr in range(len(karyos)) if theoretical_num_clones[kr] == 2]).reshape([counts_clones[2],2])
 
 
-            k_means_2 = ((torch.amin(k2, dim = 1) - 0.12) / (K +1) ).reshape([1, counts_clones[2]]) * torch.arange(1, K + 1).reshape([K,1]) + 0.12
+            k_means_2 = ((torch.amin(k2, dim = 1) - 0.05) / (K +1) ).reshape([1, counts_clones[2]]) * torch.arange(1, K + 1).reshape([K,1]) + 0.12
         else:
             k_means_2 = 0
 
@@ -75,7 +75,7 @@ def guide(data, K=1, tail=1, purity=0.96, clonal_beta_var=1., number_of_trials_c
         if 1 in counts_clones.keys():
             k1 = torch.tensor([theoretical_clonal_means[kr] for kr in range(len(karyos)) if theoretical_num_clones[kr] == 1]).reshape([counts_clones[1],1])
 
-            k_means_1 = ((torch.amin(k1, dim = 1) - 0.12) / (K + 1)).reshape([1,counts_clones[1]]) * torch.arange(1, K + 1).reshape([K, 1])  + 0.12
+            k_means_1 = ((torch.amin(k1, dim = 1) - 0.05) / (K + 1)).reshape([1,counts_clones[1]]) * torch.arange(1, K + 1).reshape([K, 1])  + 0.12
         else:
             k_means_1 = 0
     else:
