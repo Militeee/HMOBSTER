@@ -5,6 +5,7 @@ import tqdm
 
 import pyro as pyro
 import numpy as np
+import math
 from pyro.infer.autoguide import AutoDelta
 import pyro.poutine as poutine
 import torch
@@ -13,17 +14,34 @@ from mobster.utils_mobster import *
 from mobster.stopping_criteria import *
 import mobster.model_selection_mobster as ms
 from mobster.calculate_posteriors import *
+from pyro.util import ignore_jit_warnings
 
-def fit_mobster(data, K, tail=1, purity=0.96,alpha_prior_concentration = 5, alpha_prior_rate = 10, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
-         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = ELBO_stopping_criteria, lr = 0.05, max_it = 5000, e = 0.001):
+
+def fit_mobster(data, K, tail=1, purity=0.96, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
+                alpha_precision_concentration = 5, alpha_precision_rate=0.1,
+         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = ELBO_stopping_criteria, lr = 0.05,
+                max_it = 5000, e = 0.001, compile = False, CUDA = False, seed = 3, lrd_gamma = 0.1):
+
+
+    pyro.set_rng_seed(seed)
+
+    if CUDA:
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
+    if compile:
+        loss = pyro.infer.JitTraceGraph_ELBO
+    else:
+        loss = pyro.infer.TraceGraph_ELBO
 
     model = mobster.model
     guide = mobster.guide
 
+    lrd = lrd_gamma ** (1/max_it)
+
     svi = pyro.infer.SVI(model=model,
                      guide=guide,
-                     optim=pyro.optim.Adam({"lr": lr}),
-                     loss=pyro.infer.TraceGraph_ELBO())
+                     optim=pyro.optim.ClippedAdam({"lr": lr, "lrd" : lrd}),
+                     loss= loss())
 
     print('Running MOBSTER on {} karyotypes with {} subclones.'.format(len(data), K), flush=True)
     if tail == 1:
@@ -34,8 +52,8 @@ def fit_mobster(data, K, tail=1, purity=0.96,alpha_prior_concentration = 5, alph
         'K' : K,
         'tail' : tail,
         'purity' : purity,
-        'alpha_prior_concentration' : alpha_prior_concentration,
-        'alpha_prior_rate' : alpha_prior_rate,
+        'alpha_precision_concentration' : alpha_precision_concentration,
+        'alpha_precision_rate' : alpha_precision_rate,
         'number_of_trials_clonal_mean' : number_of_trials_clonal_mean,
         'number_of_trials_k' : number_of_trials_k,
         'prior_lims_clonal' : prior_lims_clonal,
@@ -44,7 +62,7 @@ def fit_mobster(data, K, tail=1, purity=0.96,alpha_prior_concentration = 5, alph
     loss = run(data, params, svi, stopping, max_it, e)
 
     params_dict = retrieve_params()
-
+    print("", flush=True)
     print("Computing cluster assignements.", flush=True)
     params_dict = retrieve_posterior_probs(data, params_dict, tail)
 
@@ -93,11 +111,13 @@ def run(data, params, svi, stopping, max_it, e):
         t.refresh()
 
         loss = svi.step(**data_dict)
-        losses.append(loss / N)
+        losses.append(loss)
 
         old, new = new, loss
 
         if stopping(old, new, e):
+            break
+        if np.isinf(loss) or math.isinf(loss):
             break
 
     return losses

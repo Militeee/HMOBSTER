@@ -2,12 +2,13 @@ import pyro as pyro
 from pyro.infer import config_enumerate
 import torch
 from mobster.likelihood_calculation import *
+import mobster.utils_mobster as mut
 
 
 
 @config_enumerate
-def model(data, K=1, tail=1, purity=0.96, alpha_prior_concentration = 5, alpha_prior_rate = 10, number_of_trials_clonal_mean=500., number_of_trials_k=300.,
-         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.]):
+def model(data, K=1, tail=1, purity=0.96,  number_of_trials_clonal_mean=500., number_of_trials_k=300.,
+         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration = 5, alpha_precision_rate=0.1):
 
     """Hierarchical bayesian model for Subclonal Deconvolution from VAF
 
@@ -39,8 +40,6 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_concentration = 5, alpha_p
 
     # Split major and minor allele
     karyos = list(data.keys())
-    major = [int(str(i).split(":")[0]) for i in karyos]
-    minor = [int(str(i).split(":")[1]) for i in karyos]
 
     # Initialize means as they are into conditional block
     betas_subclone_mean2 = 0
@@ -48,16 +47,12 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_concentration = 5, alpha_p
     betas_subclone_mean = 0
     betas_subclone_n_samples = 0
 
-    # Here we calculate the theoretical number of clonal clusters, i.e. 1 if LOH of major=minor, 2 otherwise
+    # Here we calculate the theoretical number of clonal clusters
+    theoretical_num_clones = [mut.theo_clonal_list[kr] for kr in karyos]
 
-    theoretical_num_clones = [1 if (mn == 0 or mn == mj) else 2 for mj, mn in zip(major, minor)]
+    # Calculate the theoretical clonal means, wihch can be analytically defined for simple karyotypes, and then multiply them by the ploidy
+    theoretical_clonal_means = [mut.theo_clonal_means_list[kr] * purity for kr in karyos]
 
-    # Calculate the theoretical clonal means, whichc correspond just to major/tot (and minor/tot) * purity
-    theoretical_clonal_means = [purity if (mn == 0 or mn == mj) else torch.tensor(
-        [(mj / (mj + mn)) * purity, (mn / (mn + mj)) * purity]) for mj, mn in zip(major, minor)]
-    # We do it separately for number of clonal cluster 1 and 2
-    theoretical_clonal_means = [0.5 * purity if (mn == mj) else j for mj, mn, j in
-                                zip(major, minor, theoretical_clonal_means)]
 
     # Count how many karyotypes we have in our dataset for each theoretical number of clones
     counts_clones = dict()
@@ -65,16 +60,14 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_concentration = 5, alpha_p
         counts_clones[i] = counts_clones.get(i, 0) + 1
 
     # Prior over the mean of the alphas
-    alpha_prior = pyro.sample('u', dist.Uniform(0.5, 5))
+    alpha_prior = pyro.sample('u', dist.Uniform(0.1, 5))
 
-    alpha_prior_sd = pyro.sample('sd_tail', dist.Gamma(concentration=alpha_prior_concentration, rate=alpha_prior_rate))
 
     # We enter the karyotype plate
     # We may think about tensorizing it
     for kr in pyro.plate("kr", len(karyos)):
 
-        # sample the tail slope
-        alpha = pyro.sample('alpha_{}'.format(kr), dist.LogNormal(torch.log(alpha_prior), alpha_prior_sd))
+
 
         # We construct two different computational graphs for cases with 2 and 1 clonal clusters
         if theoretical_num_clones[kr] == 2:
@@ -89,7 +82,7 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_concentration = 5, alpha_p
                 if K == 0:
                     k_means = torch.zeros(0)
                 else:
-                    k_means = (torch.min(theoretical_clonal_means[kr] - 0.05) / K) * torch.arange(1,K+1)
+                    k_means = (torch.min(theoretical_clonal_means[kr] - 0.01) / (K + 1)) * torch.arange(1,K+1)
                 # Number of sucessful trials for beta means prior
                 bm_12 = torch.tensor(
                     flatten_list([theoretical_clonal_means[kr].tolist(), k_means.tolist()])) * number_of_trials_clonal_mean
@@ -115,29 +108,37 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_concentration = 5, alpha_p
                 if K == 0:
                     k_means = torch.zeros(0)
                 else:
-                    k_means = (theoretical_clonal_means[kr] - 0.05) / K *  torch.arange(1,K+1)
+                    k_means = (theoretical_clonal_means[kr] - 0.01) / (K + 1) * torch.arange(1,K+1)
                 bm_11 = torch.tensor(
-                    flatten_list([theoretical_clonal_means[kr], k_means.tolist()])) * number_of_trials_clonal_mean
+                    flatten_list([theoretical_clonal_means[kr].tolist(), k_means.tolist()])) * number_of_trials_clonal_mean
                 bm_21 = number_of_trials_clonal_mean - bm_11
                 betas_subclone_mean = pyro.sample('beta_clone_mean_{}'.format(kr), dist.Beta(bm_11, bm_21))
                 bns_11 = torch.tensor((1 * [prior_lims_clonal[0]]) + (K * [prior_lims_k[0]]))
                 bns_21 = torch.tensor((1 * [prior_lims_clonal[1]]) + (K * [prior_lims_k[1]]))
                 betas_subclone_n_samples = pyro.sample('beta_clone_n_samples_{}'.format(kr),
                                                        dist.Uniform(bns_11, bns_21))
-
-        # Tail vs no tail probability, Dirichlet priors can sometimes create problems, but no better solution
-        tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.ones(2)))
+        if (tail == 1):
+            # Tail vs no tail probability, Dirichlet priors can sometimes create problems, but no better solution
+            tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.ones(2)))
         with pyro.plate('data_{}'.format(kr), len(data[karyos[kr]])):
 
         # Here we split again the computational graph in case of tail or no tail
             if (tail == 1):
+
+                alpha_precision = pyro.sample('alpha_precision_{}'.format(kr),
+                                              dist.Gamma(concentration=alpha_precision_concentration,
+                                                         rate=alpha_precision_rate))
+
+                alpha = pyro.sample("alpha_noise_{}".format(kr),
+                                    dist.LogNormal(torch.log(alpha_prior * mut.theo_allele_list[karyos[kr]]), 1 / alpha_precision))
+
                 # The likelihood is different among the karyotypes classes
                 if theoretical_num_clones[kr] == 2:
                     beta = beta_lk(betas_subclone_mean2 * betas_subclone_n_samples2,
                                    (1 - betas_subclone_mean2) * betas_subclone_n_samples2,
                                    weights_2, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
-                    pareto = dist.Pareto(torch.min(data[karyos[kr]]) - 1e-5, alpha).log_prob(data[karyos[kr]])
+                    pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
 
@@ -146,7 +147,7 @@ def model(data, K=1, tail=1, purity=0.96, alpha_prior_concentration = 5, alpha_p
                                    (1 - betas_subclone_mean) * betas_subclone_n_samples,
                                    weights_1, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
-                    pareto = dist.Pareto(torch.min(data[karyos[kr]]) - 1e-5, alpha).log_prob(data[karyos[kr]])
+                    pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
             else:

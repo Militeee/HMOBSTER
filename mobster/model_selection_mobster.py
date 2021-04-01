@@ -40,8 +40,5 @@ def number_of_samples(data):
 
     res = 0
     for k in data:
-        if data[k].shape is None:
-            res += np.prod(len(data[k]))
-        else:
-            res += np.prod(data[k].shape)
+        res += np.prod(data[k].shape)
     return res

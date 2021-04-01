@@ -5,7 +5,7 @@ from setuptools import setup
 #        return f.read()
 
 setup(name='HMOBSTER',
-      version='0.0.8',
+      version='0.0.22',
       description='Copy Number genotyping from single cell RNA sequencing',
       url='https://github.com/Militeee/hmobster',
       author='Salvatore Milite',

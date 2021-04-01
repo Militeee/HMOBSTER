@@ -1,4 +1,4 @@
-from scipy.stats import beta, pareto
+from scipy.stats import beta, pareto, lognorm
 
 import matplotlib as mpl
 mpl.use('Agg')
@@ -6,25 +6,31 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
+import mobster.utils_mobster as mut
 
 
-def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 10, fig_width = 8):
+def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, fig_width = 3, drivers = None):
 
     all_params = inf_res["model_parameters"]
-    plt.rcParams["figure.figsize"] = (fig_height, fig_width)
     tail = inf_res['run_parameters']['tail']
-    fig, axs = plt.subplots(len(all_params))
+    nKar = len(all_params)
+    plt.rcParams["figure.figsize"] = (fig_height * nKar, fig_width * nKar)
+    fig, axs = plt.subplots(nKar)
     for i, kr in enumerate(data):
-
-        axs[i].hist(data[kr].detach().numpy(), bins=bins, density=True, alpha=0.48)
-        axs[i].title.set_text("Karyotype = " + kr)
+        data_mut = data[kr].detach().numpy()
+        if nKar == 1:
+            axs.hist(data_mut, bins=bins, density=True, alpha=0.48)
+            axs.title.set_text("Karyotype = " + kr)
+        else:
+            axs[i].hist(data_mut, bins=bins, density=True, alpha=0.48)
+            axs[i].title.set_text("Karyotype = " + kr)
         params = all_params[kr]
 
         karyos = list(data.keys())
 
         major = [int(str(i).split(":")[0]) for i in karyos]
         minor = [int(str(i).split(":")[1]) for i in karyos]
-        theoretical_num_clones = [1 if (mn == 0 or mn == mj) else 2 for mj, mn in zip(major, minor)]
+        theoretical_num_clones = [mut.theo_clonal_list[kr] for kr in karyos]
         assignment_probs = params["mixture_probs"]
 
         for j in range(tail, len(assignment_probs)):
@@ -41,15 +47,38 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 10,
             x = np.linspace(0.05, 1, 200)
 
             p = beta.pdf(x, a, b) * assignment_probs[j]
-
-
-            axs[i].plot(x, p, linewidth=3, color=cl)
+            if nKar == 1:
+                axs.plot(x, p, linewidth=1.5, color=cl)
+            else:
+                axs[i].plot(x, p, linewidth=1.5, color=cl)
 
         if tail == 1:
             alpha = params["tail_shape"]
+            nall = mut.theo_allele_list[kr]
             x = np.linspace(0.05, 1, 200)
-            p = pareto.pdf(x, alpha, scale=params["tail_scale"]) * assignment_probs[0]
-            axs[i].plot(x, p, linewidth=3, color="tab:pink")
+            p = pareto.pdf(x, alpha * nall, scale=params["tail_scale"]) * assignment_probs[0]
+            ci = 2 * (1/params["tail_noise"])
+            p1 = pareto.pdf(x, np.abs(alpha - ci) * nall, scale=params["tail_scale"]) * assignment_probs[0]
+            p2 = pareto.pdf(x, np.abs(alpha + ci)  * nall, scale=params["tail_scale"]) * assignment_probs[0]
+            if nKar == 1:
+                axs.plot(x, p, linewidth=1.5, color="tab:pink")
+
+                axs.fill_between(x, p1, p2, color='pink', alpha=.8)
+            else:
+                axs[i].plot(x, p, linewidth=1.5, color="tab:pink")
+                axs[i].fill_between(x, p1, p2, color='pink', alpha=.8)
+        if drivers is not None:
+            drivers_mut = data_mut[drivers[kr]]
+
+            if(len(drivers_mut) > 0):
+                if nKar == 1:
+                    p = axs.patches
+                    heights = [patch.get_height() for patch in p]
+                    axs.vlines(drivers_mut, 0, np.max(heights))
+                else:
+                    p = axs[i].patches
+                    heights = [patch.get_height() for patch in p]
+                    axs[i].vlines(drivers_mut, 0, np.max(heights))
 
 
     pink_patch = mpatches.Patch(color='tab:pink', label='Tail')
@@ -59,3 +88,5 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 10,
     plt.legend(handles=[pink_patch, red_patch, green_patch])
 
     plt.savefig(output, dpi=300)
+
+    plt.clf()

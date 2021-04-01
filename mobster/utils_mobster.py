@@ -3,6 +3,31 @@ from tqdm import trange
 import torch
 import numpy as np
 
+
+theo_clonal_list = {
+    "1:0" : 1,
+    "1:1" : 1,
+    "2:0" : 2,
+    "2:1" : 2,
+    "2:2" : 2
+}
+
+theo_allele_list = {
+    "1:0" : 1,
+    "1:1" : 2,
+    "2:0" : 2,
+    "2:1" : 3,
+    "2:2" : 4
+}
+
+theo_clonal_means_list = {
+    "1:0" : torch.tensor(0.95),
+    "1:1" : torch.tensor(0.5),
+    "2:0" : torch.tensor([0.5,0.95]),
+    "2:1" : torch.tensor([0.333,0.666]),
+    "2:2" : torch.tensor([0.25,0.5])
+}
+
 def flatten_list(l):
     return list(flatten(l))
 
@@ -14,9 +39,7 @@ def log_sum_exp(args):
 
 def get_theo_clones(data):
     karyos = list(data.keys())
-    major = [int(str(i).split(":")[0]) for i in karyos]
-    minor = [int(str(i).split(":")[1]) for i in karyos]
-    theoretical_num_clones = [1 if (mn == 0 or mn == mj) else 2 for mj, mn in zip(major, minor)]
+    theoretical_num_clones = [theo_clonal_list[kr] for kr in karyos]
     return theoretical_num_clones
 
 def get_clones_counts(theoretical_num_clones):
@@ -72,10 +95,11 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
         mixture_weights = np.insert(mixture_weights, 0, tail_weights[0])
 
 
-
+    ca, order_vec = rename_clusters(np.argmax(params["cluster_probs"][k].detach().numpy(), axis = 0), tail, theo_clones[i])
 
     res = {"cluster_probs" : params["cluster_probs"][k].detach().numpy(),
-           "cluster_assignments" : np.argmax(params["cluster_probs"][k].detach().numpy(), axis = 0),
+           "cluster_assignments" : ca,
+           "cluster_types" : order_vec,
            "mixture_probs" : mixture_weights,
           "beta_concentration1" : beta_concentration1.detach().numpy(),
           "beta_concentration2" : beta_concentration2.detach().numpy()
@@ -83,6 +107,35 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
     if tail == 1:
         res["tail_shape"] = params['tail_mean'].detach().numpy()
         res["tail_scale"] = np.min(data[k].detach().numpy())
-        res["tail_shape_sd"] = params['tail_sd'].detach().numpy()
+        res["tail_noise"] =  1/params['alpha_noise'][i].detach().numpy()
 
     return res
+
+
+def rename_clusters(x,tail, theo_c):
+    res = np.empty(len(x), dtype='object')
+    uniq_clusts = np.unique(x)
+    base_idx = 0
+    clonal_num = 1
+    subclonal_num = 1
+    order_vec = np.array([],dtype='object' )
+    ###  IDENTIFY TAIL MUTATIONS ###
+    if tail == 1:
+        res[x == 0] = "Tail"
+        np.append(order_vec,"Tail")
+        base_idx += 1
+
+    ### IDENTIFY CLONAL MUTATIONS ###
+    for i in range(base_idx, base_idx + theo_c):
+        res[x == i] = "C" + str(clonal_num)
+        np.append(order_vec,"C" + str(clonal_num))
+        clonal_num += 1
+
+    ### IDENTIFY SUBCLONAL MUTATIONS ###
+    for i in range(base_idx + theo_c,len(uniq_clusts)):
+        res[x == i] = "S" + str(subclonal_num)
+        np.append(order_vec, "S" + str(subclonal_num))
+        subclonal_num += 1
+
+    return res,order_vec
+

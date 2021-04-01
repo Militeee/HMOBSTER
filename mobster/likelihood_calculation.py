@@ -1,6 +1,8 @@
 from mobster.utils_mobster import *
 import torch
 import pyro.distributions as dist
+from mobster.BoundedPareto import *
+
 
 def beta_lk(beta_a, beta_b, weights, K, data):
     lk = torch.ones(K, len(data))
@@ -28,6 +30,7 @@ def compute_likelihood_from_params(data, params, tail, tsum = True):
         lk = 0
     else :
         lk = [None] * len(theoretical_num_clones)
+
     for i,k in enumerate(data):
 
         if tail == 1:
@@ -55,21 +58,24 @@ def compute_likelihood_from_params(data, params, tail, tsum = True):
 
 def compute_likelihood_from_params_tail(data, params, i, theo_clones, counts_clone):
     j = counts_clone[i]
+    b_max = 0
     if theo_clones[i] == 2:
+        b_max = torch.amax(params['a_2'][:,j])
         beta = beta_lk(params['a_2'][:,j] * params['b_2'][:,j],
                        (1 - params['a_2'][:,j]) * params['b_2'][:, j],
                        params['param_weights_{}'.format(theo_clones[i])][j, :],
                        len(params['a_2'][:, j]),
                        data)
-        pareto = dist.Pareto(torch.min(data) - 1e-5, params['tail_mean']).log_prob(data)
+        pareto = BoundedPareto(torch.min(data) - 1e-5, params['tail_mean'], b_max).log_prob(data)
         lk = final_lk(pareto, beta, params['param_tail_weights'][i, :])
     else:
+        b_max = torch.amax(params['a_1'][:, j])
         beta = beta_lk(params['a_1'][:, j] * params['b_1'][:, j],
                        (1 - params['a_1'][:, j]) * params['b_1'][:, j],
                        params['param_weights_{}'.format(theo_clones[i])][j,:],
                        len(params['a_1'][:, j]),
                        data)
-        pareto = dist.Pareto(torch.min(data) - 1e-5, params['tail_mean']).log_prob(data)
+        pareto = BoundedPareto(torch.min(data) - 1e-5, params['tail_mean'], b_max).log_prob(data)
         lk = final_lk(pareto, beta, params['param_tail_weights'][i, :])
     return lk
 
