@@ -120,14 +120,14 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
         if (tail == 1):
             # Tail vs no tail probability, Dirichlet priors can sometimes create problems, but no better solution
             tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.ones(2)))
+            alpha_precision = pyro.sample('alpha_precision_{}'.format(kr),
+                                          dist.Gamma(concentration=alpha_precision_concentration,
+                                                     rate=alpha_precision_rate))
         with pyro.plate('data_{}'.format(kr), len(data[karyos[kr]])):
 
         # Here we split again the computational graph in case of tail or no tail
             if (tail == 1):
 
-                alpha_precision = pyro.sample('alpha_precision_{}'.format(kr),
-                                              dist.Gamma(concentration=alpha_precision_concentration,
-                                                         rate=alpha_precision_rate))
 
                 alpha = pyro.sample("alpha_noise_{}".format(kr),
                                     dist.LogNormal(torch.log(alpha_prior * mut.theo_allele_list[karyos[kr]]), 1 / alpha_precision))
