@@ -22,7 +22,7 @@ def final_lk(pareto, beta, weights):
     lk[1:(1 + dim1), :] = torch.log(weights[1]) + beta
     return lk
 
-def compute_likelihood_from_params(data, params, tail, tsum = True):
+def compute_likelihood_from_params(data, params, tail, truncated_pareto, tsum = True):
 
     theoretical_num_clones = get_theo_clones(data)
     clones_count = get_clones_counts(theoretical_num_clones)
@@ -34,7 +34,7 @@ def compute_likelihood_from_params(data, params, tail, tsum = True):
     for i,k in enumerate(data):
 
         if tail == 1:
-            tmp = compute_likelihood_from_params_tail(data[k], params, i, theoretical_num_clones, clones_count)
+            tmp = compute_likelihood_from_params_tail(data[k],truncated_pareto, params, i, theoretical_num_clones, clones_count)
             if tsum:
                 tmp = log_sum_exp(tmp)
                 lk += torch.sum(tmp)
@@ -56,17 +56,20 @@ def compute_likelihood_from_params(data, params, tail, tsum = True):
 
 
 
-def compute_likelihood_from_params_tail(data, params, i, theo_clones, counts_clone):
+def compute_likelihood_from_params_tail(data, truncated_pareto, params, i, theo_clones, counts_clone):
     j = counts_clone[i]
     b_max = 0
     if theo_clones[i] == 2:
-        b_max = torch.amax(params['a_2'][1:2,j])
+        b_max = torch.amin(params['a_2'][1:2,j])
         beta = beta_lk(params['a_2'][:,j] * params['b_2'][:,j],
                        (1 - params['a_2'][:,j]) * params['b_2'][:, j],
                        params['param_weights_{}'.format(theo_clones[i])][j, :],
                        len(params['a_2'][:, j]),
                        data)
-        pareto = BoundedPareto(torch.min(data) - 1e-5, params['tail_mean'], b_max).log_prob(data)
+        if truncated_pareto:
+            pareto = BoundedPareto(torch.min(data) - 1e-5, params['tail_mean'], b_max).log_prob(data)
+        else:
+            pareto = dist.Pareto(torch.min(data) - 1e-5, params['tail_mean']).log_prob(data)
         lk = final_lk(pareto, beta, params['param_tail_weights'][i, :])
     else:
         if params['a_1'][:,j].shape[0] > 1:
@@ -78,7 +81,10 @@ def compute_likelihood_from_params_tail(data, params, i, theo_clones, counts_clo
                        params['param_weights_{}'.format(theo_clones[i])][j,:],
                        len(params['a_1'][:, j]),
                        data)
-        pareto = BoundedPareto(torch.min(data) - 1e-5, params['tail_mean'], b_max).log_prob(data)
+        if truncated_pareto:
+            pareto = BoundedPareto(torch.min(data) - 1e-5, params['tail_mean'], b_max).log_prob(data)
+        else:
+            pareto = dist.Pareto(torch.min(data) - 1e-5, params['tail_mean']).log_prob(data)
         lk = final_lk(pareto, beta, params['param_tail_weights'][i, :])
     return lk
 

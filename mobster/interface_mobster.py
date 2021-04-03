@@ -17,7 +17,7 @@ from mobster.calculate_posteriors import *
 from pyro.util import ignore_jit_warnings
 
 
-def fit_mobster(data, K, tail=1, purity=0.96, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
+def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
                 alpha_precision_concentration = 5, alpha_precision_rate=0.1,
          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = ELBO_stopping_criteria, lr = 0.05,
                 max_it = 5000, e = 0.001, compile = False, CUDA = False, seed = 3, lrd_gamma = 0.1):
@@ -51,6 +51,7 @@ def fit_mobster(data, K, tail=1, purity=0.96, number_of_trials_clonal_mean=500.,
     params = {
         'K' : K,
         'tail' : tail,
+        'truncated_pareto' : truncated_pareto,
         'purity' : purity,
         'alpha_precision_concentration' : alpha_precision_concentration,
         'alpha_precision_rate' : alpha_precision_rate,
@@ -64,15 +65,15 @@ def fit_mobster(data, K, tail=1, purity=0.96, number_of_trials_clonal_mean=500.,
     params_dict = retrieve_params()
     print("", flush=True)
     print("Computing cluster assignements.", flush=True)
-    params_dict = retrieve_posterior_probs(data, params_dict, tail)
+    params_dict = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail)
 
 
     ### Caclculate information criteria
     print("Computing information criteria.", flush=True)
-    likelihood = ms.likelihood(data, params_dict, tail)
-    AIC = ms.AIC(data, params_dict, tail)
-    BIC = ms.BIC(data, params_dict, tail)
-    ICL = ms.ICL(data, params_dict, tail)
+    likelihood = ms.likelihood(data, params_dict, tail, truncated_pareto)
+    AIC = ms.AIC(data, params_dict, tail, truncated_pareto)
+    BIC = ms.BIC(data, params_dict, tail, truncated_pareto)
+    ICL = ms.ICL(data, params_dict, tail, truncated_pareto)
 
     params_dict = format_parameters_for_export(data, params_dict, tail)
 

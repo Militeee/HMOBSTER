@@ -10,7 +10,7 @@ import mobster.utils_mobster as mut
 
 
 @config_enumerate
-def guide(data, K=1, tail=1, purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
+def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
           number_of_trials_clonal=900., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision_concentration = 5, alpha_precision_rate=0.1,
           prior_lims_k=[1., 10000.]):
     """
@@ -37,7 +37,7 @@ def guide(data, K=1, tail=1, purity=0.96, clonal_beta_var=1., number_of_trials_c
     index_2 = [i for i, j in enumerate(theoretical_num_clones) if j == 2]
     index_1 = [i for i, j in enumerate(theoretical_num_clones) if j == 1]
 
-    a_prior = pyro.param("tail_mean", torch.tensor(1.5), constraint=constraints.interval(0.5, 5))
+    a_prior = pyro.param("tail_mean", torch.tensor(1), constraint=constraints.interval(0.5, 5))
     alpha_precision_par = pyro.param("alpha_noise",
                                  dist.Gamma(concentration=alpha_precision_concentration, rate=alpha_precision_rate).mean * torch.ones([len(karyos)]),
                                  constraint=constraints.positive)
@@ -64,18 +64,19 @@ def guide(data, K=1, tail=1, purity=0.96, clonal_beta_var=1., number_of_trials_c
     if K != 0:
         if 2 in counts_clones.keys():
 
-            k2 = torch.cat([theoretical_clonal_means[kr] for kr in range(len(karyos)) if theoretical_num_clones[kr] == 2]).reshape([counts_clones[2],2])
+            k2 = torch.cat([theoretical_clonal_means[kr] * purity for kr in range(len(karyos)) if theoretical_num_clones[kr] == 2]).reshape([counts_clones[2],2])
 
 
-            k_means_2 = ((torch.amin(k2, dim = 1) - 0.05) / (K +1) ).reshape([1, counts_clones[2]]) * torch.arange(1, K + 1).reshape([K,1]) + 0.12
+            k_means_2 = ((torch.amin(k2, dim = 1) - 0.01) / (K +1) ).reshape([1, counts_clones[2]]) * torch.arange(1, K + 1).reshape([K,1]) + 0.02
         else:
             k_means_2 = 0
 
 
-        if 1 in counts_clones.keys():
-            k1 = torch.tensor([theoretical_clonal_means[kr] for kr in range(len(karyos)) if theoretical_num_clones[kr] == 1]).reshape([counts_clones[1],1])
 
-            k_means_1 = ((torch.amin(k1, dim = 1) - 0.05) / (K + 1)).reshape([1,counts_clones[1]]) * torch.arange(1, K + 1).reshape([K, 1])  + 0.12
+        if 1 in counts_clones.keys():
+            k1 = torch.tensor([theoretical_clonal_means[kr] * purity for kr in range(len(karyos)) if theoretical_num_clones[kr] == 1]).reshape([counts_clones[1],1])
+
+            k_means_1 = ((torch.amin(k1, dim = 1) - 0.01) / (K + 1)).reshape([1,counts_clones[1]]) * torch.arange(1, K + 1).reshape([K, 1]) + 0.02
         else:
             k_means_1 = 0
     else:
