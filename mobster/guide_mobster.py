@@ -102,7 +102,8 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
             a21 = a22 = 0
             if K != 0:
                 # mean of the subclones, located more or less between the smallest clonal cluster and the tail
-                a_2_k = dist.Uniform(k_means_2 - 0.05, k_means_2 + 0.05).sample().reshape([K, counts_clones[2]])
+                a_2_k = dist.Uniform(k_means_2 - 0.03, k_means_2 + 0.03).sample().reshape([K, counts_clones[2]])
+                a_2_k = torch.max(a_2_k,torch.tensor([0.0001]))
                 # Number of trials  for the subclones
                 b_2_k = torch.ones([K, len(index_2)]) * number_of_trials_k
 
@@ -138,7 +139,9 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
             if K != 0:
 
-                a_1_k = dist.Uniform(k_means_1 - 0.05, k_means_1 + 0.05).sample().reshape([K, counts_clones[1]])
+                a_1_k = dist.Uniform(k_means_1 - 0.03, k_means_1 + 0.03).sample().reshape([K, counts_clones[1]])
+                a_1_k = torch.max(a_1_k,torch.tensor([0.0001]))
+
                 b_1_k = torch.ones([K, len(index_1)]) * number_of_trials_k
 
                 a11 = pyro.param('a_1',

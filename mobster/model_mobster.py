@@ -6,35 +6,53 @@ import mobster.utils_mobster as mut
 
 
 
+
 @config_enumerate
 def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_trials_clonal_mean=500., number_of_trials_k=300.,
          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration = 5, alpha_precision_rate=0.1):
 
-    """Hierarchical bayesian model for Subclonal Deconvolution from VAF
+    """Hierarchical bayesian model for Subclonal Deconvolution
 
-    This model deconvolves the signal from the Variant Allelic Frequency spectrum.
+    This model deconvolves the signal from the Variant Allelic Frequency (VAF) spectrum using a sound
+    evolutionary model based approach. The model is basically a hierarchical mixture of Beta distributions with the
+    possibility of adding a Pareto (can be also truncated) to the final mixture. Biologically the Betas should model
+    clonal and subclonal picks while the Pareto accounts for neutral Tails. It works on different karyotypes
+    (at the moment just few are supported), anyway this function should be used preferably with the `R interface <https://github.com/Militeee/rcongas>`_
+    as it provides all the necessary checks.
+
 
 
     Parameters
     ----------
     data : dictionary
-    A dictionary with karyotypes as keys (written in this form major_allele:minor_allele) and
-    as values float torch tensors with the VAF value
+        A dictionary with karyotypes as keys (written in this form major_allele:minor_allele) and
+        as values float torch tensors with the VAF value
     K : int
-    Number of subclonal clusters
+        Number of subclonal clusters
     tail: int
-    1 if inference is to perform with Pareto tail, 0 otherwise
+        1 if inference is to perform with Pareto tail, 0 otherwise
+    truncated_pareto: bool
+        True if the pareto needs to be truncated at the mean of the lowest clonal cluster
     purity: float
-    Previously estimated purity of the tumor
-    alpha_prior_sd: float
-    Prior standard deviation for the LogNormal distribution describing
-    the shape of the Pareto Distribution
-    number_of_trials_clonal_mean : int
-    Number of trials for the clonal
+        Previously estimated purity of the tumor
+    number_of_trials_clonal_mean: float
+        Number of trials for the clonal betas prior
+    number_of_trials_k : float
+        Number of trials for the subclonal betas prior
     prior_lims_clonal : list
-    Limits of the Uniform over the prior for the number of trials for the clonal clusters
+        limits for the Uniform prior for the number of the clonal Betas number of trials
     prior_lims_k : list
-    Limits of the Uniform over the prior for the number of trials for the subclonal clusters
+        Limits of the Uniform over the prior of the number of trials for the subclonal clusters
+    alpha_precision_concentration: float
+        
+
+
+    Notes
+    -----
+
+    Note that Beta distributions here are parametrized as :math:`Beta(\alpha * T, (1-\alpha) * T)`, where :math:`T` is the
+    numer of trials and :math:`\alpha` the success probability
+
 
     """
 
@@ -139,9 +157,9 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                                    weights_2, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
                     if truncated_pareto:
-                        pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
+                        pareto = BoundedPareto(torch.min(data[karyos[kr]]), alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
                     else:
-                        pareto = dist.Pareto(torch.min(data[karyos[kr]]) - 1e-5, alpha).log_prob(data[karyos[kr]])
+                        pareto = dist.Pareto(torch.min(data[karyos[kr]]), alpha).log_prob(data[karyos[kr]])
 
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
@@ -152,9 +170,9 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                                    weights_1, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
                     if truncated_pareto:
-                        pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
+                        pareto = BoundedPareto(torch.min(data[karyos[kr]]), alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
                     else:
-                        pareto = dist.Pareto(torch.min(data[karyos[kr]]) - 1e-5, alpha).log_prob(data[karyos[kr]])
+                        pareto = dist.Pareto(torch.min(data[karyos[kr]]), alpha).log_prob(data[karyos[kr]])
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
             else:
