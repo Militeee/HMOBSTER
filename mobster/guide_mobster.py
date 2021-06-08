@@ -64,8 +64,7 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
     if K != 0:
         if 2 in counts_clones.keys():
 
-            k2 = torch.cat([theoretical_clonal_means[kr] * purity for kr in range(len(karyos)) if theoretical_num_clones[kr] == 2]).reshape([counts_clones[2],2])
-
+            k2 = torch.cat([theoretical_clonal_means[kr] * purity for kr in range(len(karyos)) if theoretical_num_clones[kr] == 2]).reshape([counts_clones[2], 2])
 
             k_means_2 = ((torch.amin(k2, dim = 1) - 0.01) / (K +1) ).reshape([1, counts_clones[2]]) * torch.arange(1, K + 1).reshape([K,1]) + 0.02
         else:
@@ -93,7 +92,10 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
             pyro.sample('weights_{}'.format(kr), dist.Delta(weights_param_2[idx2]).to_event(1))
 
             # Mean parameter when the number of clonal picks is 2
-            a_2_theo = torch.cat([theoretical_clonal_means[i] for i in index_2]).reshape([2, counts_clones[2]])
+            a_2_theo = torch.cat([theoretical_clonal_means[i] for i in index_2]).reshape([counts_clones[2], 2])
+
+            a_2_theo = torch.transpose(a_2_theo,0,1)
+
 
             # Number of trials parameter when the number of clonal picks is 2
             b_2_theo = torch.ones([2, len(index_2)]) * number_of_trials_clonal_mean
@@ -107,16 +109,24 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
                 # Number of trials  for the subclones
                 b_2_k = torch.ones([K, len(index_2)]) * number_of_trials_k
 
+                upper_lim_a2 = torch.cat([torch.amax(k2, dim = 1).reshape([1,counts_clones[2]]),
+                    torch.tensor([0.99999]).repeat([1,counts_clones[2]]),
+                                          torch.amin(k2, dim = 1).reshape([1,counts_clones[2]]).repeat([K,1])], dim = 0)
                 a21 = pyro.param('a_2',
                                  torch.cat((a_2_theo, a_2_k)).reshape([2 + K, len(index_2)]),
-                                 constraint=constraints.unit_interval)
+                                 constraint=constraints.interval(1e-8,upper_lim_a2))
+
                 a22 = pyro.param('b_2',
                                  torch.cat((b_2_theo, b_2_k)).reshape([2 + K, len(index_2)]),
                                  constraint=constraints.positive)
             else:
+
+
                 a21 = pyro.param('a_2',
                                  a_2_theo.reshape([2 + K, len(index_2)]),
                                  constraint=constraints.unit_interval)
+
+
                 a22 = pyro.param('b_2',
                                  b_2_theo.reshape([2 + K, len(index_2)]),
                                  constraint=constraints.positive)
@@ -143,10 +153,13 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
                 a_1_k = torch.max(a_1_k,torch.tensor([0.0001]))
 
                 b_1_k = torch.ones([K, len(index_1)]) * number_of_trials_k
+                upper_lim_a1 = torch.cat([torch.tensor([0.99999]).repeat([1,counts_clones[1]]),k1.reshape([1,counts_clones[1]]).repeat([K,1])], dim = 0)
 
                 a11 = pyro.param('a_1',
                                  torch.cat((a_1_theo, a_1_k)).reshape([1 + K, len(index_1)]),
-                                 constraint=constraints.unit_interval)
+                                 constraint=constraints.interval(1e-8, upper_lim_a1))
+
+
                 a12 = pyro.param('b_1',
                                  torch.cat((b_1_theo, b_1_k)).reshape([1 + K, len(index_1)]),
                                  constraint=constraints.positive)

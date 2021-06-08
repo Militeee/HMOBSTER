@@ -104,6 +104,7 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                 # Number of sucessful trials for beta means prior
                 bm_12 = torch.tensor(
                     flatten_list([theoretical_clonal_means[kr].tolist(), k_means.tolist()])) * number_of_trials_clonal_mean
+
                 # Number of unsucessful trials for beta means prior
                 bm_22 = number_of_trials_clonal_mean - bm_12
                 # As we are writing a bayesian model, beta clonal means prior are actually around
@@ -157,9 +158,9 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                                    weights_2, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
                     if truncated_pareto:
-                        pareto = BoundedPareto(torch.min(data[karyos[kr]]), alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
+                        pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
                     else:
-                        pareto = dist.Pareto(torch.min(data[karyos[kr]]), alpha).log_prob(data[karyos[kr]])
+                        pareto = dist.Pareto(torch.min(data[karyos[kr]]) - 1e-5, alpha).log_prob(data[karyos[kr]])
 
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
@@ -170,9 +171,9 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                                    weights_1, K + theoretical_num_clones[kr],
                                    data[karyos[kr]])
                     if truncated_pareto:
-                        pareto = BoundedPareto(torch.min(data[karyos[kr]]), alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
+                        pareto = BoundedPareto(torch.min(data[karyos[kr]]) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])).log_prob(data[karyos[kr]])
                     else:
-                        pareto = dist.Pareto(torch.min(data[karyos[kr]]), alpha).log_prob(data[karyos[kr]])
+                        pareto = dist.Pareto(torch.min(data[karyos[kr]]) - 1e-5, alpha).log_prob(data[karyos[kr]])
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
 
             else:

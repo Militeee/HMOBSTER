@@ -75,7 +75,7 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of
     BIC = ms.BIC(data, params_dict, tail, truncated_pareto)
     ICL = ms.ICL(data, params_dict, tail, truncated_pareto)
 
-    params_dict = format_parameters_for_export(data, params_dict, tail)
+    params_dict = format_parameters_for_export(data, params_dict, tail,K)
 
 
 

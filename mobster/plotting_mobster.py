@@ -57,16 +57,10 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
             nall = mut.theo_allele_list[kr]
             x = np.linspace(0.05, 1, 200)
             p = pareto.pdf(x, alpha * nall, scale=params["tail_scale"]) * assignment_probs[0]
-            ci = 2 * (1/params["tail_noise"])
-            p1 = pareto.pdf(x, np.abs(alpha - ci) * nall, scale=params["tail_scale"]) * assignment_probs[0]
-            p2 = pareto.pdf(x, np.abs(alpha + ci)  * nall, scale=params["tail_scale"]) * assignment_probs[0]
             if nKar == 1:
                 axs.plot(x, p, linewidth=1.5, color="tab:pink")
-
-                axs.fill_between(x, p1, p2, color='pink', alpha=.8)
             else:
                 axs[i].plot(x, p, linewidth=1.5, color="tab:pink")
-                axs[i].fill_between(x, p1, p2, color='pink', alpha=.8)
         if drivers is not None:
             drivers_mut = data_mut[drivers[kr]]
 
