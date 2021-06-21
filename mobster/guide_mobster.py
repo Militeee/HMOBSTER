@@ -42,6 +42,13 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
                                  dist.Gamma(concentration=alpha_precision_concentration, rate=alpha_precision_rate).mean * torch.ones([len(karyos)]),
                                  constraint=constraints.positive)
 
+    bmin_clonal = torch.tensor(prior_lims_clonal[0])
+    bmin_subclonal = torch.tensor(prior_lims_clonal[0])
+
+    bmax_clonal = torch.tensor(prior_lims_clonal[1])
+    bmax_subclonal = torch.tensor(prior_lims_clonal[1])
+
+
 
 
 
@@ -100,17 +107,23 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
             # Number of trials parameter when the number of clonal picks is 2
             b_2_theo = torch.ones([2, len(index_2)]) * number_of_trials_clonal_mean
 
+            # get lower bound for number of trials
+            b_2_min = torch.cat([bmin_clonal.repeat(2), bmin_subclonal.repeat(K)])
+            b_2_max = torch.cat([bmax_clonal.repeat(2), bmax_subclonal.repeat(K)])
+
+
+
             # If we have subclones
             a21 = a22 = 0
             if K != 0:
                 # mean of the subclones, located more or less between the smallest clonal cluster and the tail
                 a_2_k = dist.Uniform(k_means_2 - 0.03, k_means_2 + 0.03).sample().reshape([K, counts_clones[2]])
-                a_2_k = torch.max(a_2_k,torch.tensor([0.0001]))
+                a_2_k = torch.max(a_2_k,torch.tensor([0.00001]))
                 # Number of trials  for the subclones
                 b_2_k = torch.ones([K, len(index_2)]) * number_of_trials_k
 
                 upper_lim_a2 = torch.cat([torch.amax(k2, dim = 1).reshape([1,counts_clones[2]]),
-                    torch.tensor([0.99999]).repeat([1,counts_clones[2]]),
+                    torch.tensor([0.999999]).repeat([1,counts_clones[2]]),
                                           torch.amin(k2, dim = 1).reshape([1,counts_clones[2]]).repeat([K,1])], dim = 0)
                 a21 = pyro.param('a_2',
                                  torch.cat((a_2_theo, a_2_k)).reshape([2 + K, len(index_2)]),
@@ -118,7 +131,7 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
                 a22 = pyro.param('b_2',
                                  torch.cat((b_2_theo, b_2_k)).reshape([2 + K, len(index_2)]),
-                                 constraint=constraints.positive)
+                                 constraint=constraints.interval(b_2_min,b_2_max))
             else:
 
 
@@ -129,7 +142,7 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
                 a22 = pyro.param('b_2',
                                  b_2_theo.reshape([2 + K, len(index_2)]),
-                                 constraint=constraints.positive)
+                                 constraint=constraints.interval(b_2_min,b_2_max))
 
 
 
@@ -147,6 +160,10 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
             # Number of trials parameter when the number of clonal picks is 1
             b_1_theo = torch.ones([1, len(index_1)]) * number_of_trials_clonal_mean
 
+            # get lower bound for number of trials
+            b_1_min = torch.cat([bmin_clonal.repeat(1), bmin_subclonal.repeat(K)])
+            b_1_max = torch.cat([bmax_clonal.repeat(1), bmax_subclonal.repeat(K)])
+
             if K != 0:
 
                 a_1_k = dist.Uniform(k_means_1 - 0.03, k_means_1 + 0.03).sample().reshape([K, counts_clones[1]])
@@ -162,7 +179,7 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
                 a12 = pyro.param('b_1',
                                  torch.cat((b_1_theo, b_1_k)).reshape([1 + K, len(index_1)]),
-                                 constraint=constraints.positive)
+                                 constraint=constraints.interval(b_1_min,b_1_max))
             else:
 
 
@@ -171,7 +188,7 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
                                  constraint=constraints.unit_interval)
                 a12 = pyro.param('b_1',
                                  b_1_theo.reshape([1 + K, len(index_1)]),
-                                 constraint=constraints.positive)
+                                 constraint=constraints.interval(b_1_min,b_1_max))
 
             with pyro.plate("clones_{}".format(kr), 1 + K):
                 pyro.sample('beta_clone_mean_{}'.format(kr), dist.Delta(a11[:, idx1]))

@@ -133,7 +133,7 @@ def rename_clusters(x,tail, theo_c, K):
         clonal_num += 1
 
     ### IDENTIFY SUBCLONAL MUTATIONS ###
-    for i in range(base_idx + theo_c,base_idx + theo_c + K):
+    for i in range(base_idx + theo_c, base_idx + theo_c + K):
         res[x == i] = "S" + str(subclonal_num)
         np.append(order_vec, "S" + str(subclonal_num))
         subclonal_num += 1
