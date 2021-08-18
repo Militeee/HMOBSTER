@@ -26,6 +26,7 @@ def compute_likelihood_from_params(data, params, tail, truncated_pareto, tsum = 
 
     theoretical_num_clones = get_theo_clones(data)
     clones_count = get_clones_counts(theoretical_num_clones)
+
     if tsum:
         lk = 0
     else :

@@ -62,7 +62,9 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of
     }
     loss = run(data, params, svi, stopping, max_it, e)
 
-    params_dict = retrieve_params()
+    params_dict_noccf = retrieve_params()
+    params_dict = include_ccf(data, params_dict_noccf, K)
+
     print("", flush=True)
     print("Computing cluster assignements.", flush=True)
     params_dict = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail)
@@ -71,9 +73,9 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of
     ### Caclculate information criteria
     print("Computing information criteria.", flush=True)
     likelihood = ms.likelihood(data, params_dict, tail, truncated_pareto)
-    AIC = ms.AIC(data, params_dict, tail, truncated_pareto)
-    BIC = ms.BIC(data, params_dict, tail, truncated_pareto)
-    ICL = ms.ICL(data, params_dict, tail, truncated_pareto)
+    AIC = ms.AIC(data, params_dict, tail, truncated_pareto,params_dict_noccf)
+    BIC = ms.BIC(data, params_dict, tail, truncated_pareto,params_dict_noccf)
+    ICL = ms.ICL(data, params_dict, tail, truncated_pareto, params_dict_noccf)
 
     params_dict = format_parameters_for_export(data, params_dict, tail,K)
 
