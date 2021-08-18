@@ -12,16 +12,9 @@ import mobster.utils_mobster as mut
 @config_enumerate
 def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
           number_of_trials_clonal=900., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision_concentration = 5, alpha_precision_rate=0.1,
-          prior_lims_k=[1., 10000.]):
-    """
-    Parameters
-    ----------
-    param1 :
-    The first parameter.
-    param2 :
-    The second parameter.
+          prior_lims_k=[1., 10000.], epsilon_ccf = 0.01):
 
-    """
+
     karyos = list(data.keys())
 
     # Here we calculate the theoretical number of clonal clusters
@@ -55,6 +48,14 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
     alpha_prior = pyro.sample('u', dist.Delta(a_prior))
 
+    ccf_priors = pyro.param("ccf_priors",
+        ((torch.min(torch.tensor(1) * purity) - 0.001) / (K + 1)) * torch.arange(1,K+1),
+                            constraint=constraints.unit_interval
+                            )
+
+
+    subclonal_ccf = pyro.sample("sb_ccf", dist.Delta(ccf_priors))
+
     idx1 = 0
     idx2 = 0
 
@@ -68,31 +69,13 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
         weights_param_1 = pyro.param("param_weights_1", (1 / (K + 1)) * torch.ones([len(index_1), K + 1]),
                                      constraint=constraints.simplex)
 
-    if K != 0:
-        if 2 in counts_clones.keys():
-
-            k2 = torch.cat([theoretical_clonal_means[kr] * purity for kr in range(len(karyos)) if theoretical_num_clones[kr] == 2]).reshape([counts_clones[2], 2])
-
-            k_means_2 = ((torch.amin(k2, dim = 1) - 0.01) / (K +1) ).reshape([1, counts_clones[2]]) * torch.arange(1, K + 1).reshape([K,1]) + 0.02
-        else:
-            k_means_2 = 0
-
-
-
-        if 1 in counts_clones.keys():
-            k1 = torch.tensor([theoretical_clonal_means[kr] * purity for kr in range(len(karyos)) if theoretical_num_clones[kr] == 1]).reshape([counts_clones[1],1])
-
-            k_means_1 = ((torch.amin(k1, dim = 1) - 0.01) / (K + 1)).reshape([1,counts_clones[1]]) * torch.arange(1, K + 1).reshape([K, 1]) + 0.02
-        else:
-            k_means_1 = 0
-    else:
-        k_means_1 = k_means_2 = 0
-
 
 
     for kr in pyro.plate("kr", len(karyos)):
 
-
+        adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]]
+        pyro.sample('beta_subclone_mean_{}'.format(kr),
+                              dist.Uniform(adj_ccf - epsilon_ccf, adj_ccf + epsilon_ccf))
 
         if theoretical_num_clones[kr] == 2:
 
@@ -111,47 +94,33 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
             b_2_min = torch.cat([bmin_clonal.repeat(2), bmin_subclonal.repeat(K)])
             b_2_max = torch.cat([bmax_clonal.repeat(2), bmax_subclonal.repeat(K)])
 
+            # Number of trials  for the subclones
+            b_2_k = torch.ones([K, len(index_2)]) * number_of_trials_k
 
 
-            # If we have subclones
-            a21 = a22 = 0
+            a21 = pyro.param('a_2',
+                             a_2_theo.reshape([2, len(index_2)]),
+                             constraint=constraints.unit_interval)
+
+            a22 = 0
             if K != 0:
-                # mean of the subclones, located more or less between the smallest clonal cluster and the tail
-                a_2_k = dist.Uniform(k_means_2 - 0.03, k_means_2 + 0.03).sample().reshape([K, counts_clones[2]])
-                a_2_k = torch.max(a_2_k,torch.tensor([0.00001]))
-                # Number of trials  for the subclones
-                b_2_k = torch.ones([K, len(index_2)]) * number_of_trials_k
-
-                upper_lim_a2 = torch.cat([torch.amax(k2, dim = 1).reshape([1,counts_clones[2]]),
-                    torch.tensor([0.999999]).repeat([1,counts_clones[2]]),
-                                          torch.amin(k2, dim = 1).reshape([1,counts_clones[2]]).repeat([K,1])], dim = 0)
-                a21 = pyro.param('a_2',
-                                 torch.cat((a_2_theo, a_2_k)).reshape([2 + K, len(index_2)]),
-                                 constraint=constraints.interval(1e-8,upper_lim_a2))
-
                 a22 = pyro.param('b_2',
                                  torch.cat((b_2_theo, b_2_k)).reshape([2 + K, len(index_2)]),
                                  constraint=constraints.interval(b_2_min,b_2_max))
             else:
-
-
-                a21 = pyro.param('a_2',
-                                 a_2_theo.reshape([2 + K, len(index_2)]),
-                                 constraint=constraints.unit_interval)
-
-
                 a22 = pyro.param('b_2',
                                  b_2_theo.reshape([2 + K, len(index_2)]),
-                                 constraint=constraints.interval(b_2_min,b_2_max))
+                                 constraint=constraints.interval(b_2_min, b_2_max))
 
 
-
-            with pyro.plate("clones_{}".format(kr), 2 + K):
+            with pyro.plate("clones_{}".format(kr), 2):
                 pyro.sample('beta_clone_mean_{}'.format(kr), dist.Delta(a21[:, idx2]))
+            with pyro.plate("clones_N_{}".format(kr), 2 + K):
                 pyro.sample('beta_clone_n_samples_{}'.format(kr), dist.Delta(a22[:, idx2]))
             idx2 += 1
 
         else:
+
             pyro.sample('weights_{}'.format(kr), dist.Delta(weights_param_1[idx1]).to_event(1))
 
             # Mean parameter when the number of clonal picks is 1
@@ -161,37 +130,31 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
             b_1_theo = torch.ones([1, len(index_1)]) * number_of_trials_clonal_mean
 
             # get lower bound for number of trials
-            b_1_min = torch.cat([bmin_clonal.repeat(1), bmin_subclonal.repeat(K)])
-            b_1_max = torch.cat([bmax_clonal.repeat(1), bmax_subclonal.repeat(K)])
+            # get lower bound for number of trials
+            b_1_min = bmin_clonal.repeat(1).repeat(counts_clones[1],1).transpose(1, 0)
+            b_1_max = bmax_clonal.repeat(1).repeat(counts_clones[1], 1).transpose(1, 0)
 
+            b_1_k = torch.ones([K, len(index_1)]) * number_of_trials_k
+
+            a11 = pyro.param('a_1',
+                             a_1_theo.reshape([1 , len(index_1)]),
+                             constraint=constraints.unit_interval)
+
+            a12 = 0
             if K != 0:
-
-                a_1_k = dist.Uniform(k_means_1 - 0.03, k_means_1 + 0.03).sample().reshape([K, counts_clones[1]])
-                a_1_k = torch.max(a_1_k,torch.tensor([0.0001]))
-
-                b_1_k = torch.ones([K, len(index_1)]) * number_of_trials_k
-                upper_lim_a1 = torch.cat([torch.tensor([0.99999]).repeat([1,counts_clones[1]]),k1.reshape([1,counts_clones[1]]).repeat([K,1])], dim = 0)
-
-                a11 = pyro.param('a_1',
-                                 torch.cat((a_1_theo, a_1_k)).reshape([1 + K, len(index_1)]),
-                                 constraint=constraints.interval(1e-8, upper_lim_a1))
-
-
                 a12 = pyro.param('b_1',
                                  torch.cat((b_1_theo, b_1_k)).reshape([1 + K, len(index_1)]),
                                  constraint=constraints.interval(b_1_min,b_1_max))
             else:
-
-
-                a11 = pyro.param('a_1',
-                                 a_1_theo.reshape([1 + K, len(index_1)]),
-                                 constraint=constraints.unit_interval)
                 a12 = pyro.param('b_1',
-                                 b_1_theo.reshape([1 + K, len(index_1)]),
-                                 constraint=constraints.interval(b_1_min,b_1_max))
+                                 b_1_theo.reshape([1, len(index_1)]),
+                                 constraint=constraints.interval(b_1_min, b_1_max))
 
-            with pyro.plate("clones_{}".format(kr), 1 + K):
+
+
+            with pyro.plate("clones_{}".format(kr), 1):
                 pyro.sample('beta_clone_mean_{}'.format(kr), dist.Delta(a11[:, idx1]))
+            with pyro.plate("clones_N_{}".format(kr), 1 + K):
                 pyro.sample('beta_clone_n_samples_{}'.format(kr), dist.Delta(a12[:, idx1]))
             idx1 += 1
 
