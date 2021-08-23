@@ -91,8 +91,8 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
             b_2_theo = torch.ones([2, len(index_2)]) * number_of_trials_clonal_mean
 
             # get lower bound for number of trials
-            b_2_min = torch.cat([bmin_clonal.repeat(2), bmin_subclonal.repeat(K)])
-            b_2_max = torch.cat([bmax_clonal.repeat(2), bmax_subclonal.repeat(K)])
+            b_2_min = torch.cat([bmin_clonal.repeat(2), bmin_subclonal.repeat(K)]).reshape([-1,1])
+            b_2_max = torch.cat([bmax_clonal.repeat(2), bmax_subclonal.repeat(K)]).reshape([-1,1])
 
             # Number of trials  for the subclones
             b_2_k = torch.ones([K, len(index_2)]) * number_of_trials_k
@@ -106,7 +106,9 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
             if K != 0:
                 a22 = pyro.param('b_2',
                                  torch.cat((b_2_theo, b_2_k)).reshape([2 + K, len(index_2)]),
-                                 constraint=constraints.interval(b_2_min,b_2_max))
+                                 constraint=constraints.interval(b_2_min,
+                                                                 b_2_max))
+
             else:
                 a22 = pyro.param('b_2',
                                  b_2_theo.reshape([2 + K, len(index_2)]),

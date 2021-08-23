@@ -164,9 +164,10 @@ def include_ccf(data, params, K):
     ccf_cat2 = torch.outer(params["ccf_priors"], correct_ccfs2)
     ccf_cat1 = torch.outer(params["ccf_priors"], correct_ccfs1)
 
-
-    params['a_2'] = torch.cat([params['a_2'], ccf_cat2.reshape([K,-1]) ], 0)
-    params['a_1'] = torch.cat([params['a_1'], ccf_cat1.reshape([K,-1]) ], 0)
+    if "a_2" in params:
+        params['a_2'] = torch.cat([params['a_2'], ccf_cat2.reshape([K,-1]) ], 0)
+    if "a_1" in params:
+        params['a_1'] = torch.cat([params['a_1'], ccf_cat1.reshape([K,-1]) ], 0)
 
     return params
 
