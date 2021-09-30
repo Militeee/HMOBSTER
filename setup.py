@@ -5,7 +5,7 @@ from setuptools import setup
 #        return f.read()
 
 setup(name='HMOBSTER',
-      version='0.0.35',
+      version='0.0.41',
       description='VAF clustering for multiple karyotypes',
       url='https://github.com/Militeee/hmobster',
       author='Salvatore Milite',
@@ -18,7 +18,6 @@ setup(name='HMOBSTER',
             'pyro-ppl>=0.4',
             'numpy>=1.18',
             'scikit-learn',
-            'seaborn'
 
       ],
       include_package_data=True,

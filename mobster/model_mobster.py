@@ -89,16 +89,19 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
     #ccf_priors = ((torch.min(torch.tensor(1) * purity) - 0.001) / (K + 1)) * torch.arange(1,K+1)
     #subclonal_ccf = pyro.sample("sb_ccf", dist.Beta(ccf_priors * number_of_trials_k, (1-ccf_priors) * number_of_trials_k))
 
-    subclonal_ccf = pyro.sample("sb_ccf",
-                                dist.Uniform(0.000001, 0.99999))
+    if K != 0:
+        with pyro.plate("subclones", K):
+            subclonal_ccf = pyro.sample("sb_ccf",
+                                       dist.Uniform(0.000001, 0.99999))
 
     # We enter the karyotype plate
     # We may think about tensorizing it
     for kr in pyro.plate("kr", len(karyos)):
-
-        adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]]
-        k_means = pyro.sample('beta_subclone_mean_{}'.format(kr),
-                              dist.Uniform(adj_ccf - epsilon_ccf, adj_ccf + epsilon_ccf))
+        if K != 0:
+            with pyro.plate("subclones_{}".format(kr), K):
+                adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]]
+                k_means = pyro.sample('beta_subclone_mean_{}'.format(kr),
+                                      dist.Uniform(adj_ccf - epsilon_ccf, adj_ccf + epsilon_ccf))
 
         # We construct two different computational graphs for cases with 2 and 1 clonal clusters
         if theoretical_num_clones[kr] == 2:
