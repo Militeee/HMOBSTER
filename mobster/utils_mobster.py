@@ -128,27 +128,27 @@ def rename_clusters(x,tail, theo_c, K):
     base_idx = 0
     clonal_num = 1
     subclonal_num = 1
-    order_vec = np.array([],dtype='object')
+    order_vec = []
 
     ###  IDENTIFY TAIL MUTATIONS ###
     if tail == 1:
         res[x == 0] = "Tail"
-        np.append(order_vec, "Tail")
+        order_vec.append("Tail")
         base_idx += 1
 
     ### IDENTIFY CLONAL MUTATIONS ###
     for i in range(base_idx, base_idx + theo_c):
         res[x == i] = "C" + str(clonal_num)
-        np.append(order_vec, "C" + str(clonal_num))
+        order_vec.append("C" + str(clonal_num))
         clonal_num += 1
 
     ### IDENTIFY SUBCLONAL MUTATIONS ###
     for i in range(base_idx + theo_c, base_idx + theo_c + K):
         res[x == i] = "S" + str(subclonal_num)
-        np.append(order_vec, "S" + str(subclonal_num))
+        order_vec.append("S" + str(subclonal_num))
         subclonal_num += 1
 
-    return res,order_vec
+    return res,np.array(order_vec)
 
 def include_ccf(data, params, K):
 

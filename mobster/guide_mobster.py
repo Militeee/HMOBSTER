@@ -48,13 +48,14 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
     alpha_prior = pyro.sample('u', dist.Delta(a_prior))
 
+
     ccf_priors = pyro.param("ccf_priors",
         ((torch.min(torch.tensor(1) * purity) - 0.001) / (K + 1)) * torch.arange(1,K+1),
                             constraint=constraints.unit_interval
                             )
-
-
-    subclonal_ccf = pyro.sample("sb_ccf", dist.Delta(ccf_priors))
+    if K != 0:
+        with pyro.plate("subclones", K):
+            subclonal_ccf = pyro.sample("sb_ccf", dist.Delta(ccf_priors).to_event(0))
 
     idx1 = 0
     idx2 = 0
@@ -72,10 +73,11 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
 
     for kr in pyro.plate("kr", len(karyos)):
-
-        adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]]
-        pyro.sample('beta_subclone_mean_{}'.format(kr),
-                              dist.Uniform(adj_ccf - epsilon_ccf, adj_ccf + epsilon_ccf))
+        if K != 0:
+            with pyro.plate("subclones_{}".format(kr), K):
+                adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]]
+                pyro.sample('beta_subclone_mean_{}'.format(kr),
+                                      dist.Uniform(adj_ccf - epsilon_ccf, adj_ccf + epsilon_ccf))
 
         if theoretical_num_clones[kr] == 2:
 
