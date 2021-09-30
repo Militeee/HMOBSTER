@@ -18,7 +18,6 @@ setup(name='HMOBSTER',
             'pyro-ppl>=0.4',
             'numpy>=1.18',
             'scikit-learn',
-            'seaborn'
 
       ],
       include_package_data=True,

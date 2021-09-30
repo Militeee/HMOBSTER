@@ -2,21 +2,21 @@ from mobster.likelihood_calculation import *
 import numpy as np
 
 
-def ICL(data, params, tail, truncated_pareto):
-    bic = BIC(data, params, tail, truncated_pareto)
+def ICL(data, params, tail, truncated_pareto, params_noccf):
+    bic = BIC(data, params, tail, truncated_pareto, params_noccf)
     entropy = compute_entropy(params, tail)
     return bic + entropy
 
-def BIC(data, params, tail, truncated_pareto):
+def BIC(data, params, tail, truncated_pareto, params_noccf):
     lk = likelihood(data, params, tail, truncated_pareto)
-    n_params = calculate_number_of_params(params)
+    n_params = calculate_number_of_params(params_noccf)
     n = number_of_samples(data)
     return np.log(n) * n_params - 2 * lk
 
 
-def AIC(data, params, tail, truncated_pareto):
+def AIC(data, params, tail, truncated_pareto, params_noccf):
     lk = likelihood(data, params, tail, truncated_pareto)
-    n_params = calculate_number_of_params(params)
+    n_params = calculate_number_of_params(params_noccf)
     return 2 * n_params - 2 * lk
 
 

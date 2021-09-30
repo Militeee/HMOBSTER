@@ -21,12 +21,21 @@ theo_allele_list = {
 }
 
 theo_clonal_means_list = {
-    "1:0" : torch.tensor(0.95),
+    "1:0" : torch.tensor(0.999),
     "1:1" : torch.tensor(0.5),
-    "2:0" : torch.tensor([0.5,0.95]),
+    "2:0" : torch.tensor([0.5,0.999]),
     "2:1" : torch.tensor([0.333,0.666]),
     "2:2" : torch.tensor([0.25,0.5])
 }
+
+ccf_adjust =  {
+    "1:0" : torch.tensor(1),
+    "1:1" : torch.tensor(0.5),
+    "2:0" : torch.tensor(0.5),
+    "2:1" : torch.tensor(0.333),
+    "2:2" : torch.tensor(0.25)
+}
+
 
 def flatten_list(l):
     return list(flatten(l))
@@ -102,7 +111,8 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
            "cluster_types" : order_vec,
            "mixture_probs" : mixture_weights,
           "beta_concentration1" : beta_concentration1.detach().numpy(),
-          "beta_concentration2" : beta_concentration2.detach().numpy()
+          "beta_concentration2" : beta_concentration2.detach().numpy(),
+           "ccf_subclones" : params["ccf_priors"].detach().numpy(),
         }
     if tail == 1:
         res["tail_shape"] = params['tail_mean'].detach().numpy()
@@ -118,25 +128,46 @@ def rename_clusters(x,tail, theo_c, K):
     base_idx = 0
     clonal_num = 1
     subclonal_num = 1
-    order_vec = np.array([],dtype='object')
+    order_vec = []
 
     ###  IDENTIFY TAIL MUTATIONS ###
     if tail == 1:
         res[x == 0] = "Tail"
-        np.append(order_vec, "Tail")
+        order_vec.append("Tail")
         base_idx += 1
 
     ### IDENTIFY CLONAL MUTATIONS ###
     for i in range(base_idx, base_idx + theo_c):
         res[x == i] = "C" + str(clonal_num)
-        np.append(order_vec, "C" + str(clonal_num))
+        order_vec.append("C" + str(clonal_num))
         clonal_num += 1
 
     ### IDENTIFY SUBCLONAL MUTATIONS ###
     for i in range(base_idx + theo_c, base_idx + theo_c + K):
         res[x == i] = "S" + str(subclonal_num)
-        np.append(order_vec, "S" + str(subclonal_num))
+        order_vec.append("S" + str(subclonal_num))
         subclonal_num += 1
 
-    return res,order_vec
+    return res,np.array(order_vec)
+
+def include_ccf(data, params, K):
+
+    if K == 0:
+        return params
+    kar = list(data.keys())
+    cccfs_2 = [ccf_adjust[k] for k in kar if theo_clonal_list[k] == 2]
+    cccfs_1 = [ccf_adjust[k] for k in kar if theo_clonal_list[k] == 1]
+
+    correct_ccfs2 = torch.tensor(cccfs_2)
+    correct_ccfs1 = torch.tensor(cccfs_1)
+
+    ccf_cat2 = torch.outer(params["ccf_priors"], correct_ccfs2)
+    ccf_cat1 = torch.outer(params["ccf_priors"], correct_ccfs1)
+
+    if "a_2" in params:
+        params['a_2'] = torch.cat([params['a_2'], ccf_cat2.reshape([K,-1]) ], 0)
+    if "a_1" in params:
+        params['a_1'] = torch.cat([params['a_1'], ccf_cat1.reshape([K,-1]) ], 0)
+
+    return params
 
