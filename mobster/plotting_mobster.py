@@ -18,6 +18,7 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
     fig, axs = plt.subplots(nKar)
     for i, kr in enumerate(data):
         data_mut = data[kr].detach().numpy()
+        data_mut = data_mut[:,0] / data_mut[:,1]
         if nKar == 1:
             axs.hist(data_mut, bins=bins, density=True, alpha=0.48)
             axs.title.set_text("Karyotype = " + kr)

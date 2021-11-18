@@ -4,11 +4,11 @@ import torch
 
 
 class BoundedPareto(Rejector):
-    def __init__(self, scale, alpha, upper_limit, validate_args=None):
+    def __init__(self, scale, alpha, upper_limit, validate_args=False):
         propose = Pareto(scale, alpha, validate_args=validate_args)
 
         def log_prob_accept(x):
-            return (x < upper_limit).type_as(x).log()
+            return (x <= upper_limit).type_as(x).log()
 
         #log_scale = torch.Tensor(alpha) * torch.log(torch.Tensor([scale / upper_limit]))
         log_scale = 0

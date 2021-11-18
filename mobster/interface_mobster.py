@@ -18,7 +18,7 @@ from pyro.util import ignore_jit_warnings
 
 def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
                 alpha_precision_concentration = 5, alpha_precision_rate=0.1,
-         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = ELBO_stopping_criteria, lr = 0.05,
+         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = all_stopping_criteria, lr = 0.05,
                 max_it = 5000, e = 0.001, compile = False, CUDA = False, seed = 3, lrd_gamma = 0.1):
 
 
@@ -61,20 +61,21 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of
     }
     loss = run(data, params, svi, stopping, max_it, e)
 
-    params_dict_noccf = retrieve_params()
+    params_dict_noccf = ms.retrieve_params()
+    params_dict_noccf["purity"] = purity
     params_dict = include_ccf(data, params_dict_noccf, K)
-
-    print("", flush=True)
+    del params_dict["purity"]
+    print("", flush=True,end ="")
     print("Computing cluster assignements.", flush=True)
-    params_dict = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail)
+    params_dict,lk = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail)
 
 
     ### Caclculate information criteria
     print("Computing information criteria.", flush=True)
-    likelihood = ms.likelihood(data, params_dict, tail, truncated_pareto)
-    AIC = ms.AIC(data, params_dict, tail, truncated_pareto,params_dict_noccf)
-    BIC = ms.BIC(data, params_dict, tail, truncated_pareto,params_dict_noccf)
-    ICL = ms.ICL(data, params_dict, tail, truncated_pareto, params_dict_noccf)
+    likelihood = ms.likelihood(lk)
+    AIC = ms.AIC(likelihood,params_dict)
+    BIC = ms.BIC(likelihood, data,params_dict)
+    ICL = ms.ICL(likelihood, data, params_dict, tail, params_dict_noccf)
 
     params_dict = format_parameters_for_export(data, params_dict, tail,K)
 
@@ -92,7 +93,7 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of
         "run_parameters" : params,
         "loss": np.array(loss)
     }
-    print("Done!", flush = True)
+    print("Done!\n", flush = True)
 
     return final_dict
 
@@ -105,6 +106,9 @@ def run(data, params, svi, stopping, max_it, e):
     data_dict["data"] = data
     pyro.clear_param_store()
     loss = new = svi.step(**data_dict)
+
+    new_w = retrieve_params()
+
     losses = []
     t = trange(max_it, desc='Bar desc', leave=True)
     for i in t:
@@ -115,16 +119,12 @@ def run(data, params, svi, stopping, max_it, e):
         loss = svi.step(**data_dict)
         losses.append(loss)
 
-        old, new = new, loss
+        old_w, new_w = new_w, retrieve_params()
 
-        if stopping(old, new, e):
+        if stopping(old_w, new_w, e):
             break
         if np.isinf(loss) or math.isinf(loss):
             break
 
     return losses
 
-def retrieve_params():
-    param_names = pyro.get_param_store()
-    res = {nms: pyro.param(nms) for nms in param_names}
-    return res

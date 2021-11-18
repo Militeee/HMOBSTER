@@ -12,6 +12,6 @@ def retrieve_posterior_probs(data, truncated_pareto, parameters, tail):
             norm_fact = log_sum_exp(lks_k)
             res[k] = torch.exp(lks_k - norm_fact)
     parameters["cluster_probs"] = res
-    return parameters
+    return parameters, lks
 
 

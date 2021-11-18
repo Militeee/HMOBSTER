@@ -1,5 +1,6 @@
 from pandas.core.common import flatten
 from tqdm import trange
+import pyro
 import torch
 import numpy as np
 
@@ -21,10 +22,10 @@ theo_allele_list = {
 }
 
 theo_clonal_means_list = {
-    "1:0" : torch.tensor(0.999),
+    "1:0" : torch.tensor(0.9999),
     "1:1" : torch.tensor(0.5),
-    "2:0" : torch.tensor([0.5,0.999]),
-    "2:1" : torch.tensor([0.333,0.666]),
+    "2:0" : torch.tensor([0.5,0.9999]),
+    "2:1" : torch.tensor([1/3.,2/3.]),
     "2:2" : torch.tensor([0.25,0.5])
 }
 
@@ -32,7 +33,7 @@ ccf_adjust =  {
     "1:0" : torch.tensor(1),
     "1:1" : torch.tensor(0.5),
     "2:0" : torch.tensor(0.5),
-    "2:1" : torch.tensor(0.333),
+    "2:1" : torch.tensor(1/3.),
     "2:2" : torch.tensor(0.25)
 }
 
@@ -91,11 +92,11 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
 
     j = counts_clone[i]
     if theo_clones[i] == 2:
-        beta_concentration1 = params['a_2'][:,j] * params['b_2'][:,j]
-        beta_concentration2 = (1 - params['a_2'][:,j]) * params['b_2'][:, j]
+        beta_concentration1 = params['a_2'][:,j] * params['avg_number_of_trials_beta'][i]
+        beta_concentration2 = (1 - params['a_2'][:,j]) * params['avg_number_of_trials_beta'][i]
     else:
-        beta_concentration1 = params['a_1'][:, j] * params['b_1'][:, j]
-        beta_concentration2 = (1 - params['a_1'][:, j]) * params['b_1'][:, j]
+        beta_concentration1 = params['a_1'][:, j] * params['avg_number_of_trials_beta'][i]
+        beta_concentration2 = (1 - params['a_1'][:, j]) * params['avg_number_of_trials_beta'][i]
 
     mixture_weights = params['param_weights_{}'.format(theo_clones[i])][j, :].detach().numpy()
     if tail == 1:
@@ -103,6 +104,9 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
         mixture_weights = mixture_weights * tail_weights[1]
         mixture_weights = np.insert(mixture_weights, 0, tail_weights[0])
 
+    NV = data[k][:,0]
+    DP = data[k][:,1]
+    VAF = NV / DP
 
     ca, order_vec = rename_clusters(np.argmax(params["cluster_probs"][k].detach().numpy(), axis = 0), tail, theo_clones[i], K)
 
@@ -113,10 +117,11 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
           "beta_concentration1" : beta_concentration1.detach().numpy(),
           "beta_concentration2" : beta_concentration2.detach().numpy(),
            "ccf_subclones" : params["ccf_priors"].detach().numpy(),
+            "dispersion_noise" : 1/ params['prc_number_of_trials_beta']
         }
     if tail == 1:
         res["tail_shape"] = params['tail_mean'].detach().numpy()
-        res["tail_scale"] = np.min(data[k].detach().numpy())
+        res["tail_scale"] = np.min(VAF.detach().numpy())
         res["tail_noise"] =  1/params['alpha_noise'][i].detach().numpy()
 
     return res
@@ -155,8 +160,8 @@ def include_ccf(data, params, K):
     if K == 0:
         return params
     kar = list(data.keys())
-    cccfs_2 = [ccf_adjust[k] for k in kar if theo_clonal_list[k] == 2]
-    cccfs_1 = [ccf_adjust[k] for k in kar if theo_clonal_list[k] == 1]
+    cccfs_2 = [ccf_adjust[k] * params["purity"] for k in kar if theo_clonal_list[k] == 2]
+    cccfs_1 = [ccf_adjust[k] * params["purity"] for k in kar if theo_clonal_list[k] == 1]
 
     correct_ccfs2 = torch.tensor(cccfs_2)
     correct_ccfs1 = torch.tensor(cccfs_1)
@@ -170,4 +175,49 @@ def include_ccf(data, params, K):
         params['a_1'] = torch.cat([params['a_1'], ccf_cat1.reshape([K,-1]) ], 0)
 
     return params
+
+try:
+    from typing import Iterable
+except ImportError:
+    from collections import Iterable
+
+
+
+
+def flatten(items):
+    for x in items:
+        if isinstance(x, Iterable) and not isinstance(x, (str, bytes)):
+            for sub_x in flatten(x):
+                yield sub_x
+        else:
+            yield x
+
+def retrieve_params():
+    param_names = pyro.get_param_store()
+    res = {nms: pyro.param(nms) for nms in param_names}
+    return res
+
+def collect_weights(pars):
+    pars = list(flatten([value.detach().tolist() for key, value in pars.items() if key.find("weights") >= 0]))
+    return(np.array(pars))
+
+def collect_params(pars):
+    pars = list(flatten([value.detach().tolist() for key, value in pars.items()]))
+    return(np.array(pars))
+
+def collect_params_no_noise(pars):
+    beta = list(flatten([value.detach().tolist() for key, value in pars.items() if key.find("a_") >= 0]))
+    overdisp = pars["avg_number_of_trials_beta"]
+    mix = list(flatten([value.detach().tolist() for key, value in pars.items() if key.find("weights") >= 0]))
+    ret = list(flatten([beta,overdisp ,mix]))
+
+    if "u" in pars.keys():
+        tail_mean = pars["u"].detach().tolist()
+        ret = list(flatten([ret, tail_mean]))
+
+    if "ccf_priors" in pars.keys():
+        subclones = pars["ccf_priors"].detach().tolist()
+        ret = list(flatten([ret, subclones]))
+    return(np.array(ret))
+
 

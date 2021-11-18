@@ -1,9 +1,27 @@
 import numpy as np
-def ELBO_stopping_criteria(old, new, e=0.01):
-    diff_ELBO = np.abs(old - new)
-    cutoff = e * np.abs(old)
+from mobster.utils_mobster import *
 
-    if diff_ELBO <= cutoff :
+
+def all_stopping_criteria(old, new, e=0.01):
+    old = collect_params(old)
+    new = collect_params(new)
+    diff_mix = np.abs(old - new) / np.abs(old)
+    if np.all(diff_mix < e):
         return True
     return False
 
+def mixture_stopping_criteria(old, new, e=0.01):
+    old = collect_weights(old)
+    new = collect_weights(new)
+    diff_mix = np.abs(old - new) / np.abs(old)
+    if np.all(diff_mix < e):
+        return True
+    return False
+
+def all_no_noise_stopping_criteria(old, new, e=0.01):
+    old = collect_params_no_noise(old)
+    new = collect_params_no_noise(new)
+    diff_mix = np.abs(old - new)/ np.abs(old)
+    if np.all(diff_mix < e):
+        return True
+    return False
