@@ -8,7 +8,7 @@ import mobster.utils_mobster as mut
 
 
 @config_enumerate
-def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_trials_clonal_mean=500., number_of_trials_k=300.,
+def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal", purity=0.96,  number_of_trials_clonal_mean=500., number_of_trials_k=300.,
          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration = 2, alpha_precision_rate=0.01, epsilon_ccf = 0.01):
 
     """Hierarchical bayesian model for Subclonal Deconvolution∑
@@ -129,11 +129,14 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                 bm_22 = number_of_trials_clonal_mean - bm_12
                 # As we are writing a bayesian model, beta clonal means prior are actually around
                 # the theoretical values
-                betas_subclone_mean2 = pyro.sample('beta_clone_mean_{}'.format(kr), dist.Beta(bm_12, bm_22))
+                betas_clone_mean2 = pyro.sample('beta_clone_mean_{}'.format(kr), dist.Beta(bm_12, bm_22))
 
 
-                if K != 0:
-                    betas_subclone_mean2 = torch.cat([betas_subclone_mean2,k_means])
+                if K > 0:
+
+                    if subclonal_prior == "Moyal":
+                        prior_subclonal_mean =
+
 
             # Here we initialize both the clonal and the subclonal beta clusters
             with pyro.plate("clones_N_{}".format(kr), 2 + K):
@@ -154,7 +157,10 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                 betas_subclone_mean = pyro.sample('beta_clone_mean_{}'.format(kr), dist.Beta(bm_11, bm_21))
 
                 if K > 0:
-                    betas_subclone_mean = torch.cat([betas_subclone_mean,k_means])
+                    with pyro.plate("clones_N_{}".format(kr), 1 + K):
+                        if subclonal_prior == "Moyal":
+                            betas_subclone_mean = pyro.sample(BoundedMoyal(loc, scale,torch.min(VAF) - 1e-5,torch.amin(theoretical_clonal_means[kr]) * purity))
+
 
             with pyro.plate("clones_N_{}".format(kr), 1 + K):
                 betas_subclone_n_samples = pyro.sample('beta_clone_n_samples_{}'.format(kr),
@@ -202,9 +208,9 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
 
                 # The likelihood is different among the karyotypes classes
                 if theoretical_num_clones[kr] == 2:
-                    rho = rho = torch.mean(1 / (1 + betas_subclone_mean2 * betas_subclone_n_samples2 + (1 - betas_subclone_mean2) * betas_subclone_n_samples2))
-                    beta = beta_lk(betas_subclone_mean2 * betas_subclone_n_samples2,
-                                   (1 - betas_subclone_mean2) * betas_subclone_n_samples2,
+                    rho = rho = torch.mean(1 / (1 + betas_clone_mean2 * betas_subclone_n_samples2 + (1 - betas_clone_mean2) * betas_subclone_n_samples2))
+                    beta = beta_lk(betas_clone_mean2 * betas_subclone_n_samples2,
+                                   (1 - betas_clone_mean2) * betas_subclone_n_samples2,
                                    weights_2, K + theoretical_num_clones[kr],
                                    NV, DP)
 
