@@ -79,16 +79,16 @@ def compute_entropy(params, tail):
 
 
 
-def format_parameters_for_export(data, params, tail, K):
+def format_parameters_for_export(data, params, tail, K, purity, truncated_pareto):
     res = {k : 0 for k in data.keys()}
     theoretical_num_clones = get_theo_clones(data)
     clones_count = get_clones_counts(theoretical_num_clones)
     for i, k in enumerate(res):
-        res[k] = format_parameters_for_export_aux(data, params,k, i, theoretical_num_clones, clones_count, tail, K)
+        res[k] = format_parameters_for_export_aux(data, params,k, i, theoretical_num_clones, clones_count, tail, K, purity, truncated_pareto)
     return res
 
 
-def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clone, tail, K):
+def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clone, tail, K, purity, truncated_pareto):
 
     j = counts_clone[i]
     if theo_clones[i] == 2:
@@ -99,10 +99,33 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
         beta_concentration2 = (1 - params['a_1'][:, j]) * params['avg_number_of_trials_beta'][i]
 
     mixture_weights = params['param_weights_{}'.format(theo_clones[i])][j, :].detach().numpy()
+
+    if K > 0:
+        ccfs_torch = (params["ccf_priors"] * ccf_adjust[k] * purity)
+        ccfs = [ccfs_torch.detach().tolist()]
+
     if tail == 1:
         tail_weights = params['param_tail_weights'][i, :].detach().numpy()
         mixture_weights = mixture_weights * tail_weights[1]
         mixture_weights = np.insert(mixture_weights, 0, tail_weights[0])
+
+        if theo_clones[i] == 2:
+            if truncated_pareto:
+                b_max = torch.amin(params['a_2'][0:1,j])
+                if K > 0:
+                    bm = [b_max.detach().tolist()]
+                    b_max = torch.Tensor(list(flatten([bm, ccfs])))
+
+            else:
+                b_max = torch.tensor(0.999)
+        else:
+            if truncated_pareto:
+                b_max = params['a_1'][0, j] - torch.amax(ccfs_torch).item()
+                if K > 0:
+                    bm = [b_max.detach().tolist()]
+                    b_max = torch.Tensor(list(flatten([bm, ccfs])))
+            else:
+                b_max = torch.tensor(0.999)
 
     NV = data[k][:,0]
     DP = data[k][:,1]
@@ -116,14 +139,22 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
            "mixture_probs" : mixture_weights,
           "beta_concentration1" : beta_concentration1.detach().numpy(),
           "beta_concentration2" : beta_concentration2.detach().numpy(),
-           "ccf_subclones" : params["ccf_priors"].detach().numpy(),
             "dispersion_noise" : 1/ params['prc_number_of_trials_beta']
         }
+
+
     if tail == 1:
         res["tail_shape"] = params['tail_mean'].detach().numpy()
         res["tail_scale"] = np.min(VAF.detach().numpy())
         res["tail_noise"] =  1/params['alpha_noise'][i].detach().numpy()
+        res["tail_higher"] = b_max.detach().numpy()
+        if K > 0:
 
+            res["multi_tail_weights"] = params['multitail_weights'][i].detach().numpy()
+            res["ccf_subclones"] = params["ccf_priors"].detach().numpy()
+
+        else:
+            res["multi_tail_weights"] = np.array(1)
     return res
 
 
@@ -155,13 +186,15 @@ def rename_clusters(x,tail, theo_c, K):
 
     return res,np.array(order_vec)
 
-def include_ccf(data, params, K):
+
+
+def include_ccf(data, params, K, purity):
 
     if K == 0:
         return params
     kar = list(data.keys())
-    cccfs_2 = [ccf_adjust[k] * params["purity"] for k in kar if theo_clonal_list[k] == 2]
-    cccfs_1 = [ccf_adjust[k] * params["purity"] for k in kar if theo_clonal_list[k] == 1]
+    cccfs_2 = [ccf_adjust[k] * purity for k in kar if theo_clonal_list[k] == 2]
+    cccfs_1 = [ccf_adjust[k] * purity for k in kar if theo_clonal_list[k] == 1]
 
     correct_ccfs2 = torch.tensor(cccfs_2)
     correct_ccfs1 = torch.tensor(cccfs_1)

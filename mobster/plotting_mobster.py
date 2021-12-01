@@ -1,3 +1,4 @@
+import torch
 from scipy.stats import beta, pareto, lognorm
 
 import matplotlib as mpl
@@ -13,6 +14,8 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
 
     all_params = inf_res["model_parameters"]
     tail = inf_res['run_parameters']['tail']
+    K = inf_res['run_parameters']['K']
+    truncated_pareto = inf_res['run_parameters']['truncated_pareto']
     nKar = len(all_params)
     plt.rcParams["figure.figsize"] = (fig_height * nKar, fig_width * nKar)
     fig, axs = plt.subplots(nKar)
@@ -54,14 +57,25 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
                 axs[i].plot(x, p, linewidth=1.5, color=cl)
 
         if tail == 1:
-            alpha = params["tail_shape"]
-            nall = mut.theo_allele_list[kr]
-            x = np.linspace(0.05, 1, 200)
-            p = pareto.pdf(x, alpha * nall, scale=params["tail_scale"]) * assignment_probs[0]
-            if nKar == 1:
-                axs.plot(x, p, linewidth=1.5, color="tab:pink")
+            if K > 0 and truncated_pareto:
+                for i in range(K + 1):
+                    alpha = params["tail_shape"]
+                    nall = mut.theo_allele_list[kr]
+                    x = np.linspace(0.05, 1, 1000)
+                    p = pareto.pdf(x, alpha * nall, scale=params["tail_scale"])
+                    p[p < params["tail_higher"][i]] = 0
+                    p = p / np.trapz(p,x)
+                    p *= assignment_probs[0] * params["multi_tail_weights"][i]
+                    axs.plot(x, p, linewidth=1.5, color="tab:pink")
             else:
-                axs[i].plot(x, p, linewidth=1.5, color="tab:pink")
+                alpha = params["tail_shape"]
+                nall = mut.theo_allele_list[kr]
+                x = np.linspace(0.05, 1, 10000)
+                p = pareto.pdf(x, alpha * nall, scale=params["tail_scale"]) * assignment_probs[0]
+                if nKar == 1:
+                    axs.plot(x, p, linewidth=1.5, color="tab:pink")
+                else:
+                    axs[i].plot(x, p, linewidth=1.5, color="tab:pink")
         if drivers is not None:
             drivers_mut = data_mut[drivers[kr]]
 

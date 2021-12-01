@@ -84,12 +84,13 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
         counts_clones[i] = counts_clones.get(i, 0) + 1
 
     # Prior over the mean of the alphas
-    alpha_prior = pyro.sample('u', dist.Gamma( 2, 0.4 ))
+
+    alpha_prior = pyro.sample('u', dist.Gamma( 10, 10 ))
 
     #ccf_priors = ((torch.min(torch.tensor(1) * purity) - 0.001) / (K + 1)) * torch.arange(1,K+1)
     #subclonal_ccf = pyro.sample("sb_ccf", dist.Beta(ccf_priors * number_of_trials_k, (1-ccf_priors) * number_of_trials_k))
 
-    if K != 0:
+    if K > 0:
         with pyro.plate("subclones", K):
             subclonal_ccf = pyro.sample("sb_ccf",
                                        dist.Uniform(0.000001, 0.99999))
@@ -97,18 +98,20 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
     # We enter the karyotype plate
     # We may think about tensorizing it
     for kr in pyro.plate("kr", len(karyos)):
-        if K != 0:
+        if K > 0:
             with pyro.plate("subclones_{}".format(kr), K):
                 adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]] * purity
                 k_means = pyro.sample('beta_subclone_mean_{}'.format(kr),
-                                      dist.Uniform(adj_ccf - epsilon_ccf, adj_ccf + epsilon_ccf))
+                                      dist.Uniform((subclonal_ccf - epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity,
+                                                   (subclonal_ccf + epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity))
+
         NV = data[karyos[kr]][:,0]
         DP = data[karyos[kr]][:,1]
         VAF = NV / DP
 
-        prior_overdispersion = pyro.sample('prior_ovedisp_{}'.format(kr),
+        prior_overdispersion = pyro.sample('prior_overdisp_{}'.format(kr),
                                                 dist.Uniform(prior_lims_clonal[0], prior_lims_clonal[1]))
-        prec_overdispersion = pyro.sample('prec_ovedisp_{}'.format(kr),
+        prec_overdispersion = pyro.sample('prec_overdisp_{}'.format(kr),
                                                 dist.Gamma(3,1))
         # We construct two different computational graphs for cases with 2 and 1 clonal clusters
         if theoretical_num_clones[kr] == 2:
@@ -146,14 +149,11 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
             # Pytorch kinda sucks sometimes, so some code here is pretty hard to read
             # Maybe to rewrite using only numpy arrays and not lists
             with pyro.plate("clones_{}".format(kr), 1):
-
-
-
                 bm_11 = theoretical_clonal_means[kr] * number_of_trials_clonal_mean
                 bm_21 = number_of_trials_clonal_mean - bm_11
                 betas_subclone_mean = pyro.sample('beta_clone_mean_{}'.format(kr), dist.Beta(bm_11, bm_21))
 
-                if K != 0:
+                if K > 0:
                     betas_subclone_mean = torch.cat([betas_subclone_mean,k_means])
 
             with pyro.plate("clones_N_{}".format(kr), 1 + K):
@@ -164,22 +164,33 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
         if (tail == 1):
             # Tail vs no tail probability, Dirichlet priors can sometimes create problems, but no better solution
             tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.ones(2)))
-            if alpha_prior <= 0 or torch.isnan(alpha_prior):
-                alpha_prior = torch.tensor(0.001)
+
             alpha_precision = pyro.sample('alpha_precision_{}'.format(kr),
                                           dist.Gamma(concentration=alpha_precision_concentration,
-                                                      rate=alpha_precision_rate))
-
-
+                                                     rate=alpha_precision_rate))
             alpha = pyro.sample("alpha_noise_{}".format(kr),
-                                 dist.LogNormal(torch.log(alpha_prior * mut.theo_allele_list[karyos[kr]]),
-                                                1 / alpha_precision))
-
-
+                                dist.LogNormal(torch.log(alpha_prior * mut.theo_allele_list[karyos[kr]]),
+                                               1 / alpha_precision))
             if truncated_pareto:
-                p = pyro.sample("tail_T_{}".format(kr),
-                                BoundedPareto(torch.min(VAF) - 1e-5, alpha, torch.amin(theoretical_clonal_means[kr])))
+                if K > 0:
+                    multitails_weights = pyro.sample('multitail_weights_{}'.format(kr), dist.Dirichlet(torch.ones(K+1)))
+                    tcm = [(torch.amin(theoretical_clonal_means[kr]) * purity - torch.amax(adj_ccf)).detach().tolist()]
+                    adccf = [(adj_ccf).detach().tolist()]
+                    tcm = list(flatten([tcm, adccf]))
+                    p = torch.empty(K+1)
+                    for tails in pyro.plate("subclonal_tail_{}".format(kr), K + 1):
+                        p[tails] = pyro.sample("tail_T_{}_{}".format(kr, tails),
+                                        BoundedPareto(torch.min(VAF) - 1e-5, alpha, torch.Tensor(tcm)[tails]
+                                        ))
+                else:
+                    multitails_weights = None
+                    p = pyro.sample("tail_T_{}".format(kr),
+                                    BoundedPareto(torch.min(VAF) - 1e-5, alpha,
+                                                  torch.amin(theoretical_clonal_means[kr])))
+
+
             else:
+                multitails_weights = None
                 p = pyro.sample("tail_{}".format(kr), BoundedPareto(torch.min(VAF) - 1e-5, alpha, 1))
 
 
@@ -197,9 +208,14 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                                    weights_2, K + theoretical_num_clones[kr],
                                    NV, DP)
 
-                    pareto = pareto_lk(p, rho, NV, DP)
-
-                    pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
+                    pareto = pareto_lk(p, rho, NV, DP, K, multitails_weights)
+                    theo_weights = 0
+                    if K > 0 and truncated_pareto:
+                        clonal_prop = [1 - torch.amax(subclonal_ccf.detach()).item()]
+                        sub_ccf = [subclonal_ccf.detach().tolist()]
+                        theo_weights = torch.tensor(list(flatten([clonal_prop, sub_ccf])))
+                        theo_weights = theo_weights / torch.sum(theo_weights)
+                    pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum() +  np.log(len(NV)) * torch.dist(theo_weights, multitails_weights) )
 
 
                 else:
@@ -209,9 +225,14 @@ def model(data, K=1, tail=1, truncated_pareto = True, purity=0.96,  number_of_tr
                                    (1 - betas_subclone_mean) * betas_subclone_n_samples,
                                    weights_1, K + theoretical_num_clones[kr],
                                    NV, DP)
-
-                    pareto = pareto_lk(p, rho, NV, DP)
-                    pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum())
+                    theo_weights = 0
+                    if K > 0 and truncated_pareto:
+                        clonal_prop = [1 - torch.amax(subclonal_ccf.detach()).item()]
+                        sub_ccf = [subclonal_ccf.detach().tolist()]
+                        theo_weights = torch.Tensor(list(flatten([clonal_prop, sub_ccf])))
+                        theo_weights = theo_weights / torch.sum(theo_weights)
+                    pareto = pareto_lk(p, rho, NV, DP, K, multitails_weights)
+                    pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, beta, tail_probs)).sum() + np.log(len(NV)) * torch.dist(theo_weights, multitails_weights))
 
             else:
 

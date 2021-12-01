@@ -62,12 +62,10 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of
     loss = run(data, params, svi, stopping, max_it, e)
 
     params_dict_noccf = ms.retrieve_params()
-    params_dict_noccf["purity"] = purity
-    params_dict = include_ccf(data, params_dict_noccf, K)
-    del params_dict["purity"]
+    params_dict = include_ccf(data, params_dict_noccf, K,purity)
     print("", flush=True,end ="")
     print("Computing cluster assignements.", flush=True)
-    params_dict,lk = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail)
+    params_dict,lk = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail, purity, K)
 
 
     ### Caclculate information criteria
@@ -77,7 +75,7 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True, purity=0.96, number_of
     BIC = ms.BIC(likelihood, data,params_dict)
     ICL = ms.ICL(likelihood, data, params_dict, tail, params_dict_noccf)
 
-    params_dict = format_parameters_for_export(data, params_dict, tail,K)
+    params_dict = format_parameters_for_export(data, params_dict, tail,K, purity, truncated_pareto)
 
 
 
@@ -123,8 +121,7 @@ def run(data, params, svi, stopping, max_it, e):
 
         if stopping(old_w, new_w, e):
             break
-        if np.isinf(loss) or math.isinf(loss):
-            break
+
 
     return losses
 
