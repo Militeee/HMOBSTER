@@ -15,8 +15,8 @@ class Moyal(TorchDistribution):
 
     def __init__(self,loc, scale ,validate_args=False):
 
-        self.loc = torch.tensor(loc).float()
-        self.scale = torch.tensor(loc).float()
+        self.loc = loc
+        self.scale = scale
 
         if isinstance(loc, Number) and isinstance(scale, Number):
             batch_shape = torch.Size()
@@ -26,19 +26,18 @@ class Moyal(TorchDistribution):
 
     def _standard_moyal_pdf(self, value):
 
-        norm_const = 1/torch.sqrt(2 * PI)
-        exponent = (-(value + torch.exp(-value)) / 2)
+        norm_const = -0.5 * torch.log(torch.tensor(2 * PI))
+        exponent = (-0.5 * (value + torch.exp(-value)))
 
-        return(torch.exp(exponent) * norm_const)
+        return(exponent + norm_const)
 
     def log_prob(self, value):
-        transformed_values = (value - self._loc) / self._scale
-        std_lk = self._standard_moyal_log_prob(transformed_values) / self._scale
-
-        return(torch.log(std_lk))
+        transformed_values = (value - self.loc) * self.scale
+        std_lk = self._standard_moyal_pdf(transformed_values) + torch.log(self.scale)
+        return(std_lk)
 
     def cdf(self, value):
-      return(1 - torch.erfc(torch.exp(-0.5 * (value - self.loc) / self.scale ) / torch.sqrt(2)))
+      return(torch.erfc(torch.exp(-0.5 * (value - self.loc) / self.scale ) / torch.sqrt(torch.tensor(2))))
 
     def expand(self, batch_shape, _instance=None):
         new = self._get_checked_instance(Moyal, _instance)
@@ -60,7 +59,7 @@ class Moyal(TorchDistribution):
 
     @property
     def mean(self):
-        return self.loc + self.scale * (EULER_MASCHERONI + torch.log(2.))
+        return self.loc + self.scale * (EULER_MASCHERONI + torch.log(torch.tensor(2.)))
 
     @property
     def variance(self):
@@ -71,7 +70,7 @@ class BoundedMoyal(Rejector):
         propose = Moyal(loc, scale, validate_args=validate_args)
 
         def log_prob_accept(x):
-            return (upper_limit >= x >= 0).type_as(x).log()
+            return ((upper_limit <= x) + (x >= lower_limit)).type_as(x).log()
 
         log_scale = torch.log(propose.cdf(upper_limit) - propose.cdf(lower_limit))
         super(BoundedMoyal, self).__init__(propose, log_prob_accept, log_scale)

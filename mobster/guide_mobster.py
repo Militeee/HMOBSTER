@@ -12,8 +12,8 @@ from mobster.likelihood_calculation import *
 
 
 @config_enumerate
-def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
-          number_of_trials_clonal=900., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision_concentration = 100, alpha_precision_rate=0.1,
+def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal", purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
+          number_of_trials_subclonal=300., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision_concentration = 100, alpha_precision_rate=0.1,
           prior_lims_k=[1., 10000.], epsilon_ccf = 0.01):
 
 
@@ -81,13 +81,6 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
         DP = data[karyos[kr]][:, 1]
         VAF = NV / DP
 
-        if K > 0:
-            with pyro.plate("subclones_{}".format(kr), K):
-                adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]] * purity
-                pyro.sample('beta_subclone_mean_{}'.format(kr),
-                                      dist.Uniform((subclonal_ccf - epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity,
-                                                   (subclonal_ccf + epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity))
-
 
         prior_overdispersion = pyro.sample('prior_overdisp_{}'.format(kr),
                                            dist.Delta(avg_number_of_trials_beta[kr]))
@@ -110,7 +103,6 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
             with pyro.plate("clones_{}".format(kr), 2):
                 pyro.sample('beta_clone_mean_{}'.format(kr), dist.Delta(a21[:, idx2]))
-            with pyro.plate("clones_N_{}".format(kr), 2 + K):
                 pyro.sample('beta_clone_n_samples_{}'.format(kr), dist.LogNormal(torch.log(prior_overdispersion), 1/prec_overdispersion))
             idx2 += 1
 
@@ -128,9 +120,31 @@ def guide(data, K=1, tail=1, truncated_pareto = True, purity=0.96, clonal_beta_v
 
             with pyro.plate("clones_{}".format(kr), 1):
                 pyro.sample('beta_clone_mean_{}'.format(kr), dist.Delta(a11[:, idx1]))
-            with pyro.plate("clones_N_{}".format(kr), 1 + K):
                 pyro.sample('beta_clone_n_samples_{}'.format(kr), dist.LogNormal(torch.log(prior_overdispersion), 1/prec_overdispersion))
             idx1 += 1
+
+        if K > 0:
+            with pyro.plate("subclones_{}".format(kr), K):
+                adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]] * purity
+
+                k_means = pyro.sample('beta_subclone_mean_{}'.format(kr),
+                                      dist.Uniform((subclonal_ccf - epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity,
+                                                   (subclonal_ccf + epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity))
+
+                if subclonal_prior == "Moyal":
+                    scale_subclonal_param = pyro.param("scale_subclonal_{}".format(kr), torch.ones(K) * 0.01)
+                    scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Delta(scale_subclonal_param))
+                    pyro.sample("subclones_prior_{}".format(kr),
+                                                BoundedMoyal(k_means, scale_subclonal, torch.min(VAF) - 1e-5,
+                                                             torch.amin(
+                                                                  theoretical_clonal_means[kr]) * purity))
+
+                else:
+                    n_trials_subclonal = pyro.param("n_trials_subclonal_{}".format(kr), torch.ones(K) * number_of_trials_subclonal)
+                    num_trials_subclonal = pyro.sample("N_subclones_{}".format(kr), dist.Delta(n_trials_subclonal))
+                    pyro.sample("subclones_prior_{}".format(kr),
+                                                dist.Beta(k_means * num_trials_subclonal,
+                                                          (1 - k_means) * num_trials_subclonal))
 
         if tail == 1:
             # K = K + tail

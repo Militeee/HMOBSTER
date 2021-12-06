@@ -79,16 +79,16 @@ def compute_entropy(params, tail):
 
 
 
-def format_parameters_for_export(data, params, tail, K, purity, truncated_pareto):
+def format_parameters_for_export(data, params, tail, K, purity, truncated_pareto, subclonal_prior):
     res = {k : 0 for k in data.keys()}
     theoretical_num_clones = get_theo_clones(data)
     clones_count = get_clones_counts(theoretical_num_clones)
     for i, k in enumerate(res):
-        res[k] = format_parameters_for_export_aux(data, params,k, i, theoretical_num_clones, clones_count, tail, K, purity, truncated_pareto)
+        res[k] = format_parameters_for_export_aux(data, params,k, i, theoretical_num_clones, clones_count, tail, K, purity, truncated_pareto, subclonal_prior)
     return res
 
 
-def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clone, tail, K, purity, truncated_pareto):
+def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clone, tail, K, purity, truncated_pareto, subclonal_prior):
 
     j = counts_clone[i]
     if theo_clones[i] == 2:
@@ -152,6 +152,10 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
 
             res["multi_tail_weights"] = params['multitail_weights'][i].detach().numpy()
             res["ccf_subclones"] = params["ccf_priors"].detach().numpy()
+            if subclonal_prior == "Moyal":
+                res["scale_subclonal"] = params["scale_subclonal_{}".format(i)].detach().numpy()
+            else:
+                res["n_trials_subclonal"] = params["n_trials_subclonal_{}".format(i)].detach().numpy()
 
         else:
             res["multi_tail_weights"] = np.array(1)

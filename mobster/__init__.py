@@ -1,4 +1,4 @@
-#__all__ = ['guide', 'model', 'stopping_criteria', 'calculate_posteriors',
+# __all__ = ['guide', 'model', 'stopping_criteria', 'calculate_posteriors',
 #           'interface', 'example_loading', 'plotting', 'model_selection', 'BoundedPareto', 'Moyal']
 
 from mobster.guide_mobster import guide
@@ -8,5 +8,4 @@ from mobster.example_loading import *
 from mobster.plotting_mobster import *
 from mobster.stopping_criteria import *
 from mobster.BoundedPareto import *
-from mobster.Moyal import  *
-
+from mobster.Moyal import *
