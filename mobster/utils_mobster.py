@@ -79,16 +79,16 @@ def compute_entropy(params, tail):
 
 
 
-def format_parameters_for_export(data, params, tail, K, purity, truncated_pareto, subclonal_prior):
+def format_parameters_for_export(data, params, tail, K, purity, truncated_pareto, subclonal_prior, multi_tails):
     res = {k : 0 for k in data.keys()}
     theoretical_num_clones = get_theo_clones(data)
     clones_count = get_clones_counts(theoretical_num_clones)
     for i, k in enumerate(res):
-        res[k] = format_parameters_for_export_aux(data, params,k, i, theoretical_num_clones, clones_count, tail, K, purity, truncated_pareto, subclonal_prior)
+        res[k] = format_parameters_for_export_aux(data, params,k, i, theoretical_num_clones, clones_count, tail, K, purity, truncated_pareto, subclonal_prior, multi_tails)
     return res
 
 
-def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clone, tail, K, purity, truncated_pareto, subclonal_prior):
+def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clone, tail, K, purity, truncated_pareto, subclonal_prior, multi_tails):
 
     j = counts_clone[i]
     if theo_clones[i] == 2:
@@ -112,7 +112,7 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
         if theo_clones[i] == 2:
             if truncated_pareto:
                 b_max = torch.amin(params['a_2'][0:1,j])
-                if K > 0:
+                if K > 0 and multi_tails:
                     bm = [b_max.detach().tolist()]
                     b_max = torch.Tensor(list(flatten([bm, ccfs])))
 
@@ -120,8 +120,9 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
                 b_max = torch.tensor(0.999)
         else:
             if truncated_pareto:
-                b_max = params['a_1'][0, j] - torch.amax(ccfs_torch).item()
-                if K > 0:
+                b_max = params['a_1'][0, j]
+                if K > 0 and multi_tails:
+                    b_max -=  torch.amax(ccfs_torch).item()
                     bm = [b_max.detach().tolist()]
                     b_max = torch.Tensor(list(flatten([bm, ccfs])))
             else:
@@ -139,24 +140,25 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
            "mixture_probs" : mixture_weights,
           "beta_concentration1" : beta_concentration1.detach().numpy(),
           "beta_concentration2" : beta_concentration2.detach().numpy(),
-            "dispersion_noise" : 1/ params['prc_number_of_trials_beta']
+            "dispersion_noise" : 1/ params['prc_number_of_trials_beta'][i].detach().numpy()
         }
 
+    if K > 0:
+
+        res["ccf_subclones"] = params["ccf_priors"].detach().numpy()
+        res["loc_subclones"] = ccfs_torch.detach().numpy()
+        if subclonal_prior == "Moyal":
+            res["scale_subclonal"] = params["scale_subclonal_{}".format(i)].detach().numpy()
+        else:
+            res["n_trials_subclonal"] = params["n_trials_subclonal_{}".format(i)].detach().numpy()
 
     if tail == 1:
         res["tail_shape"] = params['tail_mean'].detach().numpy()
         res["tail_scale"] = np.min(VAF.detach().numpy())
         res["tail_noise"] =  1/params['alpha_noise'][i].detach().numpy()
         res["tail_higher"] = b_max.detach().numpy()
-        if K > 0:
-
+        if K > 0 and truncated_pareto and multi_tails:
             res["multi_tail_weights"] = params['multitail_weights'][i].detach().numpy()
-            res["ccf_subclones"] = params["ccf_priors"].detach().numpy()
-            if subclonal_prior == "Moyal":
-                res["scale_subclonal"] = params["scale_subclonal_{}".format(i)].detach().numpy()
-            else:
-                res["n_trials_subclonal"] = params["n_trials_subclonal_{}".format(i)].detach().numpy()
-
         else:
             res["multi_tail_weights"] = np.array(1)
     return res

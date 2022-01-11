@@ -8,7 +8,7 @@ import mobster.utils_mobster as mut
 
 
 @config_enumerate
-def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal", purity=0.96,  number_of_trials_clonal_mean=500.,number_of_trials_subclonal = 300, number_of_trials_k=300.,
+def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal", multi_tail = False, purity=0.96,  number_of_trials_clonal_mean=500.,number_of_trials_subclonal = 300, number_of_trials_k=300.,
          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration = 2, alpha_precision_rate=0.01, epsilon_ccf = 0.01):
 
     """Hierarchical bayesian model for Subclonal Deconvolution∑
@@ -118,7 +118,7 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
 
 
             # Number of sucessful trials for beta means prior
-            bm_1 = torch.tensor(theoretical_clonal_means[kr].tolist()) * number_of_trials_clonal_mean
+            bm_1 = torch.tensor(theoretical_clonal_means[kr].tolist()) * purity * number_of_trials_clonal_mean
 
             # Number of unsucessful trials for beta means prior
             bm_2 = number_of_trials_clonal_mean - bm_1
@@ -129,21 +129,25 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
             betas_clone_n_samples = pyro.sample('beta_clone_n_samples_{}'.format(kr),
                                                     dist.LogNormal(torch.log(prior_overdispersion), 1/prec_overdispersion))
 
-            if K > 0:
-                with pyro.plate("subclones_{}".format(kr), K):
-                    adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]] * purity
-                    k_means = pyro.sample('beta_subclone_mean_{}'.format(kr),
-                                          dist.Uniform(
-                                              (subclonal_ccf - epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity,
-                                              (subclonal_ccf + epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity))
+        if K > 0:
+            with pyro.plate("subclones_{}".format(kr), K):
+                adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]] * purity
+                k_means = pyro.sample('beta_subclone_mean_{}'.format(kr),
+                                      dist.Uniform(
+                                          (subclonal_ccf - epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity,
+                                          (subclonal_ccf + epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity))
 
-                    if subclonal_prior == "Moyal":
-                        scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Gamma(2, 2))
-                        subclone_mean = pyro.sample("subclones_prior_{}".format(kr),Moyal(k_means, scale_subclonal))
-                    else:
-                        num_trials_subclonal = pyro.sample("N_subclones_{}".format(kr), dist.Uniform(1, 10000))
-                        subclone_mean = pyro.sample("subclones_prior_{}".format(kr),
-                                                          dist.Beta(k_means * num_trials_subclonal, (1-k_means) * num_trials_subclonal))
+                if subclonal_prior == "Moyal":
+                    scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Gamma(2, 2))
+                    subclone_mean = pyro.sample("subclones_prior_{}".format(kr),
+                                            BoundedMoyal(k_means, scale_subclonal, torch.min(VAF) - 1e-5,
+                                                         torch.amin(
+                                                              theoretical_clonal_means[kr]) * purity))
+                    # subclone_mean = pyro.sample("subclones_prior_{}".format(kr),Moyal(k_means, scale_subclonal))
+                else:
+                    num_trials_subclonal = pyro.sample("N_subclones_{}".format(kr), dist.Uniform(1, 10000))
+                    subclone_mean = pyro.sample("subclones_prior_{}".format(kr),
+                                                      dist.Beta(k_means * num_trials_subclonal, (1-k_means) * num_trials_subclonal))
 
 
 
@@ -158,16 +162,20 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
                                 dist.LogNormal(torch.log(alpha_prior * mut.theo_allele_list[karyos[kr]]),
                                                1 / alpha_precision))
             if truncated_pareto:
-                if K > 0:
+                if K > 0 and multi_tail:
                     multitails_weights = pyro.sample('multitail_weights_{}'.format(kr), dist.Dirichlet(torch.ones(K+1)))
-                    tcm = [(torch.amin(theoretical_clonal_means[kr]) * purity - torch.amax(adj_ccf)).detach().tolist()]
+                    tcm = torch.amin(theoretical_clonal_means[kr] * purity) - torch.amax(adj_ccf)
+                    tcm[tcm < (torch.min(VAF) - 1e-5)] = torch.min(VAF)
                     adccf = [(adj_ccf).detach().tolist()]
-                    tcm = list(flatten([tcm, adccf]))
+                    tcm = list(flatten([tcm.detach().tolist(), adccf]))
                     p = torch.empty(K+1)
                     for tails in pyro.plate("subclonal_tail_{}".format(kr), K + 1):
-                        p[tails] = pyro.sample("tail_T_{}_{}".format(kr, tails),
-                                        BoundedPareto(torch.min(VAF) - 1e-5, alpha, torch.Tensor(tcm)[tails]
-                                        ))
+                        if torch.Tensor(tcm)[tails] > (torch.min(VAF) + 0.05):
+                            p[tails] = pyro.sample("tail_T_{}_{}".format(kr, tails),
+                                            BoundedPareto(torch.min(VAF) - 1e-5, alpha, torch.Tensor(tcm)[tails]
+                                            ))
+                        else:
+                            p[tails] = pyro.sample("tail_T_{}_{}".format(kr, tails), dist.Delta(torch.Tensor(tcm)[tails]))
                 else:
                     multitails_weights = None
                     p = pyro.sample("tail_T_{}".format(kr),
@@ -194,23 +202,35 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
                 else:
                     subclonal_lk = beta_lk(subclone_mean * num_trials_subclonal, (1 - subclone_mean) *num_trials_subclonal,
                                            K, NV, DP)
+            else:
+                has_subclones = False
+
             if tail == 1:
                 has_tail = True
                 multi_penalty = 0
-                if K > 0 and truncated_pareto:
+                if K > 0 and truncated_pareto and multi_tail:
                     clonal_prop = [1 - torch.amax(subclonal_ccf.detach()).item()]
                     sub_ccf = [subclonal_ccf.detach().tolist()]
                     theo_weights = torch.tensor(list(flatten([clonal_prop, sub_ccf])))
                     theo_weights = theo_weights / torch.sum(theo_weights)
                     multi_penalty = np.log(len(NV)) * torch.dist(theo_weights, multitails_weights)
+
                 pareto = pareto_lk(p, NV, DP, K, multitails_weights)
+
                 if has_tail and has_subclones:
                     not_neutral = torch.vstack([beta, subclonal_lk]) + torch.log(weights).reshape([K + theoretical_num_clones[kr],-1])
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto,not_neutral, tail_probs)).sum() + multi_penalty)
+
                 if has_tail and not has_subclones:
-                    not_neutral = beta + torch.log(weights)
+                    not_neutral = beta + torch.log(weights).reshape([theoretical_num_clones[kr],-1])
                     pyro.factor("lik_{}".format(kr), log_sum_exp(final_lk(pareto, not_neutral, tail_probs)).sum() + multi_penalty)
+
                 if not has_tail and  has_subclones:
-                    pyro.factor("lik_{}".format(kr), log_sum_exp(torch.vstack([beta, subclonal_lk]) + torch.log(weights)).sum())
+                    pyro.factor("lik_{}".format(kr),
+                                log_sum_exp(torch.vstack([beta, subclonal_lk]) +
+                                            torch.log(weights).reshape([K + theoretical_num_clones[kr],-1])).sum())
+
                 if not has_tail and  not has_subclones:
-                    pyro.factor("lik_{}".format(kr), log_sum_exp(beta_lk(beta, subclonal_lk, weights)).sum())
+                    pyro.factor("lik_{}".format(kr),
+                                log_sum_exp(beta +
+                                            torch.log(weights).reshape([theoretical_num_clones[kr],-1])).sum())

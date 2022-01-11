@@ -32,8 +32,8 @@ class Moyal(TorchDistribution):
         return(exponent + norm_const)
 
     def log_prob(self, value):
-        transformed_values = (value - self.loc) * self.scale
-        std_lk = self._standard_moyal_pdf(transformed_values) + torch.log(self.scale)
+        transformed_values = (value - self.loc) / self.scale
+        std_lk = self._standard_moyal_pdf(transformed_values) - torch.log(self.scale)
         return(std_lk)
 
     def cdf(self, value):
@@ -70,7 +70,6 @@ class BoundedMoyal(Rejector):
         propose = Moyal(loc, scale, validate_args=validate_args)
 
         def log_prob_accept(x):
-            return ((upper_limit <= x) + (x >= lower_limit)).type_as(x).log()
-
+            return torch.logical_and((x <= upper_limit),(x >= lower_limit)).type_as(x).log()
         log_scale = torch.log(propose.cdf(upper_limit) - propose.cdf(lower_limit))
         super(BoundedMoyal, self).__init__(propose, log_prob_accept, log_scale)

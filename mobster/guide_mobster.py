@@ -12,7 +12,7 @@ from mobster.likelihood_calculation import *
 
 
 @config_enumerate
-def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal", purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
+def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",multi_tail = False,  purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
           number_of_trials_subclonal=300., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision_concentration = 100, alpha_precision_rate=0.1,
           prior_lims_k=[1., 10000.], epsilon_ccf = 0.01):
 
@@ -88,7 +88,6 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal", 
                                           dist.Delta(precision_number_of_trials_beta[kr]))
 
         if theoretical_num_clones[kr] == 2:
-
             pyro.sample('weights_{}'.format(kr), dist.Delta(weights_param_2[idx2]).to_event(1))
 
             # Mean parameter when the number of clonal picks is 2
@@ -132,15 +131,19 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal", 
                                                    (subclonal_ccf + epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity))
 
                 if subclonal_prior == "Moyal":
-                    scale_subclonal_param = pyro.param("scale_subclonal_{}".format(kr), torch.ones(K) * 0.01)
+                    scale_subclonal_param = pyro.param("scale_subclonal_{}".format(kr), torch.ones(K) * 0.05,
+                                                       constraint=constraints.positive)
                     scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Delta(scale_subclonal_param))
                     pyro.sample("subclones_prior_{}".format(kr),
                                                 BoundedMoyal(k_means, scale_subclonal, torch.min(VAF) - 1e-5,
                                                              torch.amin(
                                                                   theoretical_clonal_means[kr]) * purity))
+                    #pyro.sample("subclones_prior_{}".format(kr), Moyal(k_means, scale_subclonal))
+
 
                 else:
-                    n_trials_subclonal = pyro.param("n_trials_subclonal_{}".format(kr), torch.ones(K) * number_of_trials_subclonal)
+                    n_trials_subclonal = pyro.param("n_trials_subclonal_{}".format(kr), torch.ones(K) * number_of_trials_subclonal,
+                                                    constraint=constraints.positive)
                     num_trials_subclonal = pyro.sample("N_subclones_{}".format(kr), dist.Delta(n_trials_subclonal))
                     pyro.sample("subclones_prior_{}".format(kr),
                                                 dist.Beta(k_means * num_trials_subclonal,
@@ -155,18 +158,23 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal", 
                                 dist.LogNormal(torch.log(alpha_prior * mut.theo_allele_list[karyos[kr]]),
                                                1 / alpha_precision))
             if truncated_pareto:
-                if K > 0:
+                if K > 0 and multi_tail:
 
                     pyro.sample('multitail_weights_{}'.format(kr), dist.Delta(multitail_weights[kr]).to_event(1))
-
-                    tcm = [(torch.amin(theoretical_clonal_means[kr] * purity) - torch.amax(adj_ccf)).detach().tolist()]
+                    tcm = torch.amin(theoretical_clonal_means[kr] * purity) - torch.amax(adj_ccf)
+                    tcm[tcm < (torch.min(VAF) - 1e-5)] = torch.min(VAF)
+                    tcm = [tcm.detach().tolist()]
                     adccf = [(adj_ccf).detach().tolist()]
                     tcm = list(flatten([tcm, adccf]))
 
+
                     for tails in pyro.plate("subclonal_tail_{}".format(kr), K + 1):
-                        pyro.sample("tail_T_{}_{}".format(kr, tails),
-                                        BoundedPareto(torch.min(VAF) - 1e-5, alpha,
-                                                      torch.Tensor(tcm)[tails] ))
+                        if torch.Tensor(tcm)[tails] > (torch.min(VAF) + 0.05):
+                            pyro.sample("tail_T_{}_{}".format(kr, tails),
+                                            BoundedPareto(torch.min(VAF) - 1e-5, alpha,
+                                                          torch.Tensor(tcm)[tails] ))
+                        else:
+                            pyro.sample("tail_T_{}_{}".format(kr, tails), dist.Delta(torch.Tensor(tcm)[tails]))
 
                 else:
                     pyro.sample("tail_T_{}".format(kr),

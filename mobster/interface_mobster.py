@@ -16,7 +16,7 @@ from mobster.calculate_posteriors import *
 from pyro.util import ignore_jit_warnings
 
 
-def fit_mobster(data, K, tail=1, truncated_pareto = True,subclonal_prior = "Moyal", purity=0.96, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
+def fit_mobster(data, K, tail=1, truncated_pareto = True, subclonal_prior = "Moyal", multi_tail = False, purity=0.96, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
                 alpha_precision_concentration = 5, alpha_precision_rate=0.1,
          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = all_stopping_criteria, lr = 0.05,
                 max_it = 5000, e = 0.001, compile = False, CUDA = False, seed = 3, lrd_gamma = 0.1):
@@ -53,6 +53,7 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True,subclonal_prior = "Moya
         'truncated_pareto' : truncated_pareto,
         'purity' : purity,
         "subclonal_prior" : subclonal_prior,
+        'multi_tail' : multi_tail,
         'alpha_precision_concentration' : alpha_precision_concentration,
         'alpha_precision_rate' : alpha_precision_rate,
         'number_of_trials_clonal_mean' : number_of_trials_clonal_mean,
@@ -63,11 +64,10 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True,subclonal_prior = "Moya
     loss = run(data, params, svi, stopping, max_it, e)
 
     params_dict = ms.retrieve_params()
-    print(params_dict)
     # params_dict = include_ccf(data, params_dict_noccf, K,purity)
     print("", flush=True,end ="")
     print("Computing cluster assignements.", flush=True)
-    params_dict,lk = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail, purity, K, subclonal_prior)
+    params_dict,lk = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail, purity, K, subclonal_prior, multi_tail)
 
 
     ### Caclculate information criteria
@@ -77,7 +77,7 @@ def fit_mobster(data, K, tail=1, truncated_pareto = True,subclonal_prior = "Moya
     BIC = ms.BIC(likelihood, data,params_dict)
     ICL = ms.ICL(likelihood, data, params_dict, tail, params_dict)
 
-    params_dict = format_parameters_for_export(data, params_dict, tail,K, purity, truncated_pareto, subclonal_prior)
+    params_dict = format_parameters_for_export(data, params_dict, tail,K, purity, truncated_pareto, subclonal_prior, multi_tail)
 
 
 
