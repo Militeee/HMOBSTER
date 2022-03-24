@@ -75,7 +75,9 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
     theoretical_num_clones = [mut.theo_clonal_list[kr] for kr in karyos]
 
     # Calculate the theoretical clonal means, wihch can be analytically defined for simple karyotypes, and then multiply them by the ploidy
-    theoretical_clonal_means = [mut.theo_clonal_means_list[kr] * purity for kr in karyos]
+    theoretical_clonal_means = [mut.theo_clonal_means_list[kr] for kr in karyos]
+
+    theo_allele_list = [mut.theo_allele_list[kr] for kr in karyos]
 
 
     # Count how many karyotypes we have in our dataset for each theoretical number of clones
@@ -84,8 +86,10 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
         counts_clones[i] = counts_clones.get(i, 0) + 1
 
     # Prior over the mean of the alphas
-
-    alpha_prior = pyro.sample('u', dist.Gamma( 10, 10 ))
+    if not multi_tail:
+        alpha_prior = pyro.sample('u', dist.Gamma( 3, 3 ))
+    else:
+        alpha_prior = pyro.sample('u', dist.Gamma(20, 20))
 
     #ccf_priors = ((torch.min(torch.tensor(1) * purity) - 0.001) / (K + 1)) * torch.arange(1,K+1)
     #subclonal_ccf = pyro.sample("sb_ccf", dist.Beta(ccf_priors * number_of_trials_k, (1-ccf_priors) * number_of_trials_k))
@@ -104,6 +108,8 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
         DP = data[karyos[kr]][:,1]
         VAF = NV / DP
 
+        theo_peaks = (theoretical_clonal_means[kr] * purity) / (2 * (1 - purity) + theo_allele_list[kr] * purity)
+
         prior_overdispersion = pyro.sample('prior_overdisp_{}'.format(kr),
                                                 dist.Uniform(prior_lims_clonal[0], prior_lims_clonal[1]))
         prec_overdispersion = pyro.sample('prec_overdisp_{}'.format(kr),
@@ -118,7 +124,7 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
 
 
             # Number of sucessful trials for beta means prior
-            bm_1 = torch.tensor(theoretical_clonal_means[kr].tolist()) * purity * number_of_trials_clonal_mean
+            bm_1 = torch.tensor(theo_peaks.tolist()) * purity * number_of_trials_clonal_mean
 
             # Number of unsucessful trials for beta means prior
             bm_2 = number_of_trials_clonal_mean - bm_1
@@ -131,21 +137,20 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
 
         if K > 0:
             with pyro.plate("subclones_{}".format(kr), K):
-                adj_ccf = subclonal_ccf * mut.ccf_adjust[karyos[kr]] * purity
+                adj_ccf = (subclonal_ccf * purity) / (2 * (1-purity) + theo_allele_list[kr] * purity)
                 k_means = pyro.sample('beta_subclone_mean_{}'.format(kr),
                                       dist.Uniform(
-                                          (subclonal_ccf - epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity,
-                                          (subclonal_ccf + epsilon_ccf) * mut.ccf_adjust[karyos[kr]] * purity))
+                                          ((subclonal_ccf - epsilon_ccf) * purity) / (2 * (1-purity) + theo_allele_list[kr] * purity),
+                                          ((subclonal_ccf + epsilon_ccf) * purity) / (2 * (1-purity) + theo_allele_list[kr] * purity)))
 
                 if subclonal_prior == "Moyal":
-                    scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Gamma(2, 2))
+                    scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Gamma(2, 10))
                     subclone_mean = pyro.sample("subclones_prior_{}".format(kr),
                                             BoundedMoyal(k_means, scale_subclonal, torch.min(VAF) - 1e-5,
-                                                         torch.amin(
-                                                              theoretical_clonal_means[kr]) * purity))
+                                                         torch.amin(theo_peaks)))
                     # subclone_mean = pyro.sample("subclones_prior_{}".format(kr),Moyal(k_means, scale_subclonal))
                 else:
-                    num_trials_subclonal = pyro.sample("N_subclones_{}".format(kr), dist.Uniform(1, 10000))
+                    num_trials_subclonal = pyro.sample("N_subclones_{}".format(kr), dist.Uniform(prior_lims_k[0], prior_lims_k[1]))
                     subclone_mean = pyro.sample("subclones_prior_{}".format(kr),
                                                       dist.Beta(k_means * num_trials_subclonal, (1-k_means) * num_trials_subclonal))
 
@@ -153,7 +158,7 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
 
         if (tail == 1):
             # Tail vs no tail probability, Dirichlet priors can sometimes create problems, but no better solution
-            tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.ones(2)))
+            tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.tensor([1, 1])))
 
             alpha_precision = pyro.sample('alpha_precision_{}'.format(kr),
                                           dist.Gamma(concentration=alpha_precision_concentration,
@@ -164,7 +169,7 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
             if truncated_pareto:
                 if K > 0 and multi_tail:
                     multitails_weights = pyro.sample('multitail_weights_{}'.format(kr), dist.Dirichlet(torch.ones(K+1)))
-                    tcm = torch.amin(theoretical_clonal_means[kr] * purity) - torch.amax(adj_ccf)
+                    tcm = theo_peaks - torch.amax(adj_ccf)
                     tcm[tcm < (torch.min(VAF) - 1e-5)] = torch.min(VAF)
                     adccf = [(adj_ccf).detach().tolist()]
                     tcm = list(flatten([tcm.detach().tolist(), adccf]))
@@ -180,7 +185,7 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
                     multitails_weights = None
                     p = pyro.sample("tail_T_{}".format(kr),
                                     BoundedPareto(torch.min(VAF) - 1e-5, alpha,
-                                                  torch.amin(theoretical_clonal_means[kr])))
+                                                  torch.amin(theo_peaks)))
 
 
             else:
@@ -200,7 +205,8 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
                 if subclonal_prior == "Moyal":
                     subclonal_lk = moyal_lk(subclone_mean, K, NV, DP)
                 else:
-                    subclonal_lk = beta_lk(subclone_mean * num_trials_subclonal, (1 - subclone_mean) *num_trials_subclonal,
+                    subclonal_lk = beta_lk(subclone_mean * num_trials_subclonal,
+                                           (1 - subclone_mean) * num_trials_subclonal,
                                            K, NV, DP)
             else:
                 has_subclones = False

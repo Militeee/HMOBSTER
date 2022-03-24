@@ -43,7 +43,8 @@ def final_lk(pareto, beta, weights):
 
     lk = torch.ones(1 + dim0, dim1)
     lk[0, :] = torch.log(weights[0]) + pareto
-    lk[1:(1 + dim1), :] = torch.log(weights[1]) + beta
+    lk[1:, :] = torch.log(weights[1]) + beta
+
     return lk
 
 
@@ -75,8 +76,7 @@ def compute_likelihood_from_params(data, params, tail, truncated_pareto, purity,
 
 
 def calculate_lk_multitail_params(NV, DP, lower, tail, b_max, weights, K, truncated_pareto, multi_tails):
-    if K > 0:
-        lk = torch.zeros(K + 1, len(NV))
+
     LINSPACE = 1000
     x = torch.linspace(lower, torch.max(b_max).item(), LINSPACE)
     if K == 0 or not truncated_pareto or not multi_tails:
@@ -85,6 +85,8 @@ def calculate_lk_multitail_params(NV, DP, lower, tail, b_max, weights, K, trunca
         y_2 = dist.Binomial(probs=x.repeat([NV.shape[0], 1]).reshape([LINSPACE, -1]), total_count=DP).log_prob(
             NV).exp()
         return torch.trapz(y_1.reshape([LINSPACE, 1]) * y_2, x=x, dim=0).log()
+
+    lk = torch.zeros(K + 1, len(NV))
     for i in range(K + 1):
         y_1 = BoundedPareto(lower, tail, b_max[i]).log_prob(
             x).exp()
@@ -113,7 +115,7 @@ def calculate_lk_moyal_params(NV, DP, lower, loc, scale, b_max, K):
         y_2 = dist.Binomial(probs=x.repeat([NV.shape[0], 1]).reshape([LINSPACE, -1]), total_count=DP).log_prob(
             NV).exp()
         lk[i, :] = torch.trapz(y_1.reshape([LINSPACE, 1]) * y_2, x=x, dim=0).log()
-    return (lk)
+    return lk
 
 
 def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, theo_clones, counts_clone, karyo,
@@ -127,8 +129,10 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
     beta = 0
     pareto = 0
 
+    theo_peaks = (theo_clonal_means_list[karyo] * purity) / (2 * (1-purity) + theo_allele_list[karyo] * purity)
+
     if K > 0:
-        ccfs = (params["ccf_priors"] * ccf_adjust[karyo] * purity)
+        ccfs = (params["ccf_priors"] * purity) / (2 * (1-purity) + theo_allele_list[karyo] * purity)
 
     if theo_clones[i] == 2:
 
@@ -136,7 +140,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                        (1 - params['a_2'][:, j]) * params['avg_number_of_trials_beta'][i],
                        len(params['a_2'][:, j]),
                        NV, DP)
-        b_max = torch.amin(params['a_2'][0:1, j])
+        b_max = torch.amin(theo_peaks)
         if tail:
             if truncated_pareto:
                 b_max_tail = b_max
@@ -163,7 +167,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                        (1 - params['a_1'][:, j]) * params['avg_number_of_trials_beta'][i],
                        len(params['a_1'][:, j]),
                        NV, DP)
-        b_max = params['a_1'][0, j].clone().detach()
+        b_max = theo_peaks.detach()
         if tail:
             if truncated_pareto:
                 b_max_tail = b_max
@@ -196,7 +200,9 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                                    K,
                                    NV, DP)
 
+
     if tail and (K > 0):
+
         not_neutral = torch.vstack([beta, subclonal_lk]) + \
                       torch.log(params['param_weights_{}'.format(theo_clones[i])][j, :]).reshape(
                           [K + theo_clones[i], -1])

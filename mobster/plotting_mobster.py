@@ -15,7 +15,7 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
     all_params = inf_res["model_parameters"]
     tail = inf_res['run_parameters']['tail']
     K = inf_res['run_parameters']['K']
-    multi_tail = K = inf_res['run_parameters']['multi_tail']
+    multi_tail =  inf_res['run_parameters']['multi_tail']
     subclonal_prior = inf_res['run_parameters']['subclonal_prior']
     truncated_pareto = inf_res['run_parameters']['truncated_pareto']
     purity = inf_res['run_parameters']['purity']

@@ -16,91 +16,89 @@ from mobster.calculate_posteriors import *
 from pyro.util import ignore_jit_warnings
 
 
-def fit_mobster(data, K, tail=1, truncated_pareto = True, subclonal_prior = "Moyal", multi_tail = False, purity=0.96, number_of_trials_clonal_mean=500.,number_of_trials_k=300.,
-                alpha_precision_concentration = 5, alpha_precision_rate=0.1,
-         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping = all_stopping_criteria, lr = 0.05,
-                max_it = 5000, e = 0.001, compile = False, CUDA = False, seed = 3, lrd_gamma = 0.1):
-
-
+def fit_mobster(data, K, tail=1, truncated_pareto=True, subclonal_prior="Moyal", multi_tail=False, purity=0.96,
+                number_of_trials_clonal_mean=500., number_of_trials_k=300.,
+                number_of_trials_subclonal=500,
+                alpha_precision_concentration=5, alpha_precision_rate=0.1,
+                prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping=all_stopping_criteria, lr=0.05,
+                max_it=5000, e=0.001, compile=False, CUDA=False, seed=3, lrd_gamma=0.1):
     pyro.set_rng_seed(seed)
 
     if CUDA:
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
     if compile:
-        loss = pyro.infer.JitTraceGraph_ELBO
+        loss = pyro.infer.JitTrace_ELBO
     else:
-        loss = pyro.infer.TraceGraph_ELBO
+        loss = pyro.infer.Trace_ELBO
 
     model = mobster.model
     guide = mobster.guide
 
-    lrd = lrd_gamma ** (1/max_it)
+    lrd = lrd_gamma ** (1 / max_it)
 
     svi = pyro.infer.SVI(model=model,
-                     guide=guide,
-                     optim=pyro.optim.ClippedAdam({"lr": lr, "lrd" : lrd}),
-                     loss= loss())
+                         guide=guide,
+                         optim=pyro.optim.ClippedAdam({"lr": lr, "lrd": lrd, "betas" : (0.95, 0.999)
+  }),
+                         loss=loss())
 
     print('Running MOBSTER on {} karyotypes with {} subclones.'.format(len(data), K), flush=True)
     if tail == 1:
-        print("Fitting a model with tail", flush = True)
+        print("Fitting a model with tail", flush=True)
     else:
         print("Fitting a model without tail", flush=True)
     params = {
-        'K' : K,
-        'tail' : tail,
-        'truncated_pareto' : truncated_pareto,
-        'purity' : purity,
-        "subclonal_prior" : subclonal_prior,
-        'multi_tail' : multi_tail,
-        'alpha_precision_concentration' : alpha_precision_concentration,
-        'alpha_precision_rate' : alpha_precision_rate,
-        'number_of_trials_clonal_mean' : number_of_trials_clonal_mean,
-        'number_of_trials_k' : number_of_trials_k,
-        'prior_lims_clonal' : prior_lims_clonal,
-        'prior_lims_k' : prior_lims_k
+        'K': K,
+        'tail': tail,
+        'truncated_pareto': truncated_pareto,
+        'purity': purity,
+        "subclonal_prior": subclonal_prior,
+        'multi_tail': multi_tail,
+        'alpha_precision_concentration': alpha_precision_concentration,
+        'alpha_precision_rate': alpha_precision_rate,
+        'number_of_trials_clonal_mean': number_of_trials_clonal_mean,
+        'number_of_trials_k': number_of_trials_k,
+        'prior_lims_clonal': prior_lims_clonal,
+        'prior_lims_k': prior_lims_k,
+        'number_of_trials_subclonal' : number_of_trials_subclonal
     }
     loss = run(data, params, svi, stopping, max_it, e)
 
     params_dict = ms.retrieve_params()
     # params_dict = include_ccf(data, params_dict_noccf, K,purity)
-    print("", flush=True,end ="")
+    print("", flush=True, end="")
     print("Computing cluster assignements.", flush=True)
-    params_dict,lk = retrieve_posterior_probs(data,truncated_pareto,  params_dict, tail, purity, K, subclonal_prior, multi_tail)
-
+    params_dict, lk = retrieve_posterior_probs(data, truncated_pareto, params_dict, tail, purity, K, subclonal_prior,
+                                               multi_tail)
 
     ### Caclculate information criteria
     print("Computing information criteria.", flush=True)
     likelihood = ms.likelihood(lk)
-    AIC = ms.AIC(likelihood,params_dict)
-    BIC = ms.BIC(likelihood, data,params_dict)
+    AIC = ms.AIC(likelihood, params_dict)
+    BIC = ms.BIC(likelihood, data, params_dict)
     ICL = ms.ICL(likelihood, data, params_dict, tail, params_dict)
 
-    params_dict = format_parameters_for_export(data, params_dict, tail,K, purity, truncated_pareto, subclonal_prior, multi_tail)
+    params_dict = format_parameters_for_export(data, params_dict, tail, K, purity, truncated_pareto, subclonal_prior,
+                                               multi_tail)
 
-
-
-    information_dict =  {"likelihood": likelihood.detach().numpy(),
-                         "AIC": AIC.detach().numpy(),
-                        "BIC" : BIC.detach().numpy(),
-                        "ICL" : ICL.detach().numpy()}
-
+    information_dict = {"likelihood": likelihood.detach().numpy(),
+                        "AIC": AIC.detach().numpy(),
+                        "BIC": BIC.detach().numpy(),
+                        "ICL": ICL.detach().numpy()}
 
     final_dict = {
-        "information_criteria" : information_dict,
-        "model_parameters" : params_dict,
-        "run_parameters" : params,
+        "information_criteria": information_dict,
+        "model_parameters": params_dict,
+        "run_parameters": params,
         "loss": np.array(loss)
     }
-    print("Done!\n", flush = True)
+    print("Done!\n", flush=True)
 
     return final_dict
 
 
-
 def run(data, params, svi, stopping, max_it, e):
-
     N = ms.number_of_samples(data)
     data_dict = params.copy()
     data_dict["data"] = data
@@ -124,6 +122,4 @@ def run(data, params, svi, stopping, max_it, e):
         if stopping(old_w, new_w, e):
             break
 
-
     return losses
-

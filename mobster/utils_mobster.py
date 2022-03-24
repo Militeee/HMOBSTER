@@ -22,11 +22,11 @@ theo_allele_list = {
 }
 
 theo_clonal_means_list = {
-    "1:0" : torch.tensor(0.9999),
-    "1:1" : torch.tensor(0.5),
-    "2:0" : torch.tensor([0.5,0.9999]),
-    "2:1" : torch.tensor([1/3.,2/3.]),
-    "2:2" : torch.tensor([0.25,0.5])
+    "1:0" : torch.tensor(1.),
+    "1:1" : torch.tensor(1.),
+    "2:0" : torch.tensor([1.,2.]),
+    "2:1" : torch.tensor([1.,2.]),
+    "2:2" : torch.tensor([1.,2.])
 }
 
 ccf_adjust =  {
@@ -101,7 +101,7 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
     mixture_weights = params['param_weights_{}'.format(theo_clones[i])][j, :].detach().numpy()
 
     if K > 0:
-        ccfs_torch = (params["ccf_priors"] * ccf_adjust[k] * purity)
+        ccfs_torch = (params["ccf_priors"] * purity) / (2 * (1 - purity) + theo_allele_list[k] * purity)
         ccfs = [ccfs_torch.detach().tolist()]
 
     if tail == 1:
