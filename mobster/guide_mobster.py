@@ -14,7 +14,7 @@ from mobster.likelihood_calculation import *
 @config_enumerate
 def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",multi_tail = False,  purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
           number_of_trials_subclonal=300., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision_concentration = 100, alpha_precision_rate=0.1,
-          prior_lims_k=[1., 10000.], epsilon_ccf = 0.01):
+          prior_lims_k=[1., 10000.], epsilon_ccf = 0.002):
 
 
     karyos = list(data.keys())
@@ -172,14 +172,14 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
                     for tails in pyro.plate("subclonal_tail_{}".format(kr), K + 1):
                         if torch.Tensor(tcm)[tails] > (torch.min(VAF) + 0.05):
                             pyro.sample("tail_T_{}_{}".format(kr, tails),
-                                            BoundedPareto(torch.min(VAF) - 1e-5, alpha,
+                                            BoundedPareto(scale_pareto(VAF), alpha,
                                                           torch.Tensor(tcm)[tails] ))
                         else:
                             pyro.sample("tail_T_{}_{}".format(kr, tails), dist.Delta(torch.Tensor(tcm)[tails]))
 
                 else:
                     pyro.sample("tail_T_{}".format(kr),
-                                    BoundedPareto(torch.min(VAF) - 1e-5, alpha,
+                                    BoundedPareto(scale_pareto(VAF), alpha,
                                                   torch.amin(theo_peaks[kr]))
                                                   )
 

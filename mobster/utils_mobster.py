@@ -154,7 +154,7 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
 
     if tail == 1:
         res["tail_shape"] = params['tail_mean'].detach().numpy()
-        res["tail_scale"] = np.min(VAF.detach().numpy())
+        res["tail_scale"] = scale_pareto(VAF).detach().numpy()
         res["tail_noise"] =  1/params['alpha_noise'][i].detach().numpy()
         res["tail_higher"] = b_max.detach().numpy()
         if K > 0 and truncated_pareto and multi_tails:
@@ -259,4 +259,24 @@ def collect_params_no_noise(pars):
         ret = list(flatten([ret, subclones]))
     return(np.array(ret))
 
+def scale_pareto(VAF):
+    NBINS = 50
+    hist = torch.histc(VAF, NBINS, 0, 1)
+    h_diff = hist[0:-1] - hist[1:]
+    vals = torch.cumsum(1/NBINS * torch.ones(NBINS),0)
+    v1 = 0
+    v2 = 0
+    for diff in h_diff:
+        v2 = diff
+        if v1 < v2:
+            break
+        v1 = v2
 
+    idx = torch.where(h_diff == v1)
+
+    best_scale = (vals[idx[0]] + vals[idx[0] + 1]) / 2
+
+    if best_scale > 0.15:
+        return torch.min(VAF) - 1e-5
+    else:
+        return best_scale - 1e-5

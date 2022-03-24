@@ -48,7 +48,7 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
 
 
 
-        for j in range(tail, params["beta_concentration1"].shape[0] + 1):
+        for j in range(tail, params["beta_concentration1"].shape[0] + tail):
 
 
             cl = "tab:green"

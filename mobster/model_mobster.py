@@ -9,7 +9,7 @@ import mobster.utils_mobster as mut
 
 @config_enumerate
 def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal", multi_tail = False, purity=0.96,  number_of_trials_clonal_mean=500.,number_of_trials_subclonal = 300, number_of_trials_k=300.,
-         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration = 2, alpha_precision_rate=0.01, epsilon_ccf = 0.01):
+         prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration = 2, alpha_precision_rate=0.01, epsilon_ccf = 0.002):
 
     """Hierarchical bayesian model for Subclonal Deconvolution∑
 
@@ -89,7 +89,7 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
     if not multi_tail:
         alpha_prior = pyro.sample('u', dist.Gamma( 3, 3 ))
     else:
-        alpha_prior = pyro.sample('u', dist.Gamma(20, 20))
+        alpha_prior = pyro.sample('u', dist.Gamma(10, 10))
 
     #ccf_priors = ((torch.min(torch.tensor(1) * purity) - 0.001) / (K + 1)) * torch.arange(1,K+1)
     #subclonal_ccf = pyro.sample("sb_ccf", dist.Beta(ccf_priors * number_of_trials_k, (1-ccf_priors) * number_of_trials_k))
@@ -177,20 +177,20 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
                     for tails in pyro.plate("subclonal_tail_{}".format(kr), K + 1):
                         if torch.Tensor(tcm)[tails] > (torch.min(VAF) + 0.05):
                             p[tails] = pyro.sample("tail_T_{}_{}".format(kr, tails),
-                                            BoundedPareto(torch.min(VAF) - 1e-5, alpha, torch.Tensor(tcm)[tails]
+                                            BoundedPareto(scale_pareto(VAF), alpha, torch.Tensor(tcm)[tails]
                                             ))
                         else:
                             p[tails] = pyro.sample("tail_T_{}_{}".format(kr, tails), dist.Delta(torch.Tensor(tcm)[tails]))
                 else:
                     multitails_weights = None
                     p = pyro.sample("tail_T_{}".format(kr),
-                                    BoundedPareto(torch.min(VAF) - 1e-5, alpha,
+                                    BoundedPareto(scale_pareto(VAF), alpha,
                                                   torch.amin(theo_peaks)))
 
 
             else:
                 multitails_weights = None
-                p = pyro.sample("tail_{}".format(kr), BoundedPareto(torch.min(VAF) - 1e-5, alpha, 1))
+                p = pyro.sample("tail_{}".format(kr), BoundedPareto(scale_pareto(VAF), alpha, 1))
 
 
         with pyro.plate('data_{}'.format(kr), len(data[karyos[kr]])):

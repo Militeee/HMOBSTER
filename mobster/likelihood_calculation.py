@@ -78,7 +78,7 @@ def compute_likelihood_from_params(data, params, tail, truncated_pareto, purity,
 def calculate_lk_multitail_params(NV, DP, lower, tail, b_max, weights, K, truncated_pareto, multi_tails):
 
     LINSPACE = 1000
-    x = torch.linspace(lower, torch.max(b_max).item(), LINSPACE)
+    x = torch.linspace(lower.item(), torch.max(b_max).item(), LINSPACE)
     if K == 0 or not truncated_pareto or not multi_tails:
         y_1 = BoundedPareto(lower, tail, b_max).log_prob(
             x).exp()
@@ -154,7 +154,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                 weights = torch.tensor(1)
                 b_max_tail = torch.tensor(0.999)
 
-            pareto = calculate_lk_multitail_params(NV, DP, torch.min(VAF) - 1e-5,
+            pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF),
                                                    params['tail_mean'] * theo_allele_list[karyo], b_max_tail,
                                                    weights, K, truncated_pareto, multi_tails)
 
@@ -183,7 +183,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                 weights = torch.tensor(1)
                 b_max_tail = torch.tensor(0.999)
 
-            pareto = calculate_lk_multitail_params(NV, DP, torch.min(VAF) - 1e-5,
+            pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF),
                                                    params['tail_mean'] * theo_allele_list[karyo], b_max_tail,
                                                    weights, K, truncated_pareto, multi_tails)
 
