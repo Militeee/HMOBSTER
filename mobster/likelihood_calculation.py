@@ -200,7 +200,6 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                                    K,
                                    NV, DP)
 
-
     if tail and (K > 0):
 
         not_neutral = torch.vstack([beta, subclonal_lk]) + \

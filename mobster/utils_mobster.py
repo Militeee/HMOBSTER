@@ -3,6 +3,8 @@ from tqdm import trange
 import pyro
 import torch
 import numpy as np
+from scipy.signal import find_peaks
+
 
 
 theo_clonal_list = {
@@ -274,9 +276,9 @@ def scale_pareto(VAF):
 
     idx = torch.where(h_diff == v1)
 
-    best_scale = (vals[idx[0]] + vals[idx[0] + 1]) / 2
+    best_scale = vals[idx[0][0]]
 
-    if best_scale > 0.15:
-        return torch.min(VAF) - 1e-5
+    if best_scale.detach().item() > 0.15:
+        return torch.min(VAF) - 1e-10
     else:
-        return best_scale - 1e-5
+        return best_scale - 1e-10

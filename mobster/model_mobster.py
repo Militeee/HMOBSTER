@@ -30,9 +30,14 @@ def model(data, K=1, tail=1, truncated_pareto = True, subclonal_prior = "Moyal",
     K : int
         Number of subclonal clusters
     tail: int
-        1 if inference is to perform with Pareto tail, 0 otherwise
+        1 if inference is to be performed with Pareto tail, 0 otherwise
     truncated_pareto: bool
         True if the pareto needs to be truncated at the mean of the lowest clonal cluster
+    subclonal_prior: str
+        Distribution to use for the subclonal cluster, currently supperted "Beta" and "Moyal"
+    multi_tail: bool
+        If True each clonal subclunal cluster has its Pareto tail, beware to run it just
+        on extremely high quality data, in general prefer the False option in large-scale analysis
     purity: float
         Previously estimated purity of the tumor
     number_of_trials_clonal_mean: float
