@@ -1,8 +1,8 @@
 from mobster.likelihood_calculation import *
 
 
-def retrieve_posterior_probs(data, truncated_pareto, parameters, tail, purity, K, subclonal_prior, multi_tails):
-    lks = compute_likelihood_from_params(data, parameters, tail, truncated_pareto,purity, K, subclonal_prior, multi_tails, tsum = False)
+def retrieve_posterior_probs(data, truncated_pareto, parameters, tail, purity, K, subclonal_prior, multi_tails, min_vaf_scale_tail):
+    lks = compute_likelihood_from_params(data, parameters, tail, truncated_pareto,purity, K, subclonal_prior, multi_tails,min_vaf_scale_tail,  tsum = False)
     res = {k : 0 for k in data.keys()}
     for k in res:
         lks_k = lks[k]

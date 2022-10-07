@@ -3,6 +3,7 @@ import torch
 import pyro.distributions as dist
 from mobster.BoundedPareto import *
 from mobster.Moyal import *
+from mobster.ParetoBinomial import *
 
 
 def beta_lk(beta_a, beta_b, K, NV, DP):
@@ -34,6 +35,16 @@ def pareto_lk(p, NV, DP, K, weights):
     else:
         return dist.Binomial(probs=p, total_count=DP).log_prob(NV)
 
+def pareto_binomial_lk(alpha, U, L, NV, DP, K, weights):
+
+    if weights is not None:
+        lk = torch.ones(K + 1, len(NV))
+        for k in range(K + 1):
+            lk[k, :] = torch.log(weights[k]) + ParetoBinomial(alpha, U[k], L,trials=DP).log_prob(NV)
+        return log_sum_exp(lk)
+    else:
+        return ParetoBinomial(alpha, U, L,trials=DP).log_prob(NV)
+
 
 def final_lk(pareto, beta, weights):
     if len(beta.shape) == 1:
@@ -48,7 +59,7 @@ def final_lk(pareto, beta, weights):
     return lk
 
 
-def compute_likelihood_from_params(data, params, tail, truncated_pareto, purity, K, subclonal_prior, multi_tails, tsum=True):
+def compute_likelihood_from_params(data, params, tail, truncated_pareto, purity, K, subclonal_prior, multi_tails, min_vaf_scale_tail, tsum=True):
     theoretical_num_clones = get_theo_clones(data)
     clones_count = get_clones_counts(theoretical_num_clones)
 
@@ -62,7 +73,7 @@ def compute_likelihood_from_params(data, params, tail, truncated_pareto, purity,
         tmp = compute_likelihood_from_params_aux(data[k], tail, truncated_pareto,
                                                  params, i,
                                                  theoretical_num_clones, clones_count,
-                                                 k, purity, K, subclonal_prior, multi_tails)
+                                                 k, purity, K, subclonal_prior, multi_tails, min_vaf_scale_tail)
         if tsum:
             tmp = log_sum_exp(tmp)
             lk += torch.sum(tmp)
@@ -75,7 +86,7 @@ def compute_likelihood_from_params(data, params, tail, truncated_pareto, purity,
     return lk
 
 
-def calculate_lk_multitail_params(NV, DP, lower, tail, b_max, weights, K, truncated_pareto, multi_tails):
+def calculate_lk_multitail_params_old(NV, DP, lower, tail, b_max, weights, K, truncated_pareto, multi_tails):
 
     LINSPACE = 1000
     x = torch.linspace(lower.item(), torch.max(b_max).item(), LINSPACE)
@@ -94,6 +105,18 @@ def calculate_lk_multitail_params(NV, DP, lower, tail, b_max, weights, K, trunca
             NV).exp()
 
         lk[i, :] = torch.trapz(y_1.reshape([LINSPACE, 1]) * y_2, x=x, dim=0).log() + torch.log(weights[i])
+    return (log_sum_exp(lk))
+
+def calculate_lk_multitail_params(NV, DP, lower, tail, b_max, weights, K, truncated_pareto, multi_tails):
+
+    if K == 0 or not truncated_pareto or not multi_tails:
+
+        return ParetoBinomial(tail, b_max, lower, trials=DP).log_prob(NV)
+
+    lk = torch.zeros(K + 1, len(NV))
+    for i in range(K + 1):
+
+        lk[i, :] = ParetoBinomial(tail, b_max[i], lower, trials=DP).log_prob(NV) + torch.log(weights[i])
     return (log_sum_exp(lk))
 
 
@@ -119,7 +142,7 @@ def calculate_lk_moyal_params(NV, DP, lower, loc, scale, b_max, K):
 
 
 def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, theo_clones, counts_clone, karyo,
-                                       purity, K, subclonal_prior, multi_tails):
+                                       purity, K, subclonal_prior, multi_tails, min_vaf_scale_tail):
     j = counts_clone[i]
     NV = data[:, 0]
     DP = data[:, 1]
@@ -154,7 +177,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                 weights = torch.tensor(1)
                 b_max_tail = torch.tensor(0.999)
 
-            pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF),
+            pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF, min_vaf_scale_tail),
                                                    params['tail_mean'] * theo_allele_list[karyo], b_max_tail,
                                                    weights, K, truncated_pareto, multi_tails)
 
@@ -183,7 +206,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                 weights = torch.tensor(1)
                 b_max_tail = torch.tensor(0.999)
 
-            pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF),
+            pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF, min_vaf_scale_tail),
                                                    params['tail_mean'] * theo_allele_list[karyo], b_max_tail,
                                                    weights, K, truncated_pareto, multi_tails)
 
@@ -191,7 +214,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
         if subclonal_prior == "Moyal":
             scale = params["scale_subclonal_{}".format(i)]
             subclonal_lk = calculate_lk_moyal_params(NV, DP, torch.min(VAF) - 1e-5,
-                                                     ccfs, scale, b_max,
+                                                     ccfs, torch.exp(scale), b_max,
                                                      K)
         else:
             n_trials = params["n_trials_subclonal_{}".format(i)]

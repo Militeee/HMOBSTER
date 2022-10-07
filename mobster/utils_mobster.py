@@ -4,6 +4,7 @@ import pyro
 import torch
 import numpy as np
 from scipy.signal import find_peaks
+from sklearn.cluster import KMeans
 
 
 
@@ -150,7 +151,7 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
         res["ccf_subclones"] = params["ccf_priors"].detach().numpy()
         res["loc_subclones"] = ccfs_torch.detach().numpy()
         if subclonal_prior == "Moyal":
-            res["scale_subclonal"] = params["scale_subclonal_{}".format(i)].detach().numpy()
+            res["scale_subclonal"] = torch.exp(params["scale_subclonal_{}".format(i)]).detach().numpy()
         else:
             res["n_trials_subclonal"] = params["n_trials_subclonal_{}".format(i)].detach().numpy()
 
@@ -233,9 +234,12 @@ def flatten(items):
         else:
             yield x
 
-def retrieve_params():
+def retrieve_params(CUDA = False):
     param_names = pyro.get_param_store()
-    res = {nms: pyro.param(nms) for nms in param_names}
+    if CUDA:
+        res = {nms: pyro.param(nms).cpu() for nms in param_names}
+    else:
+        res = {nms: pyro.param(nms) for nms in param_names}
     return res
 
 def collect_weights(pars):
@@ -261,24 +265,39 @@ def collect_params_no_noise(pars):
         ret = list(flatten([ret, subclones]))
     return(np.array(ret))
 
-def scale_pareto(VAF):
-    NBINS = 50
+def scale_pareto(VAF, max_vaf = 0.1):
+    NBINS = 100
     hist = torch.histc(VAF, NBINS, 0, 1)
-    h_diff = hist[0:-1] - hist[1:]
     vals = torch.cumsum(1/NBINS * torch.ones(NBINS),0)
-    v1 = 0
-    v2 = 0
-    for diff in h_diff:
-        v2 = diff
-        if v1 < v2:
-            break
-        v1 = v2
 
-    idx = torch.where(h_diff == v1)
+    idx = torch.where(hist[0:-1] > hist[1:])
 
     best_scale = vals[idx[0][0]]
-
-    if best_scale.detach().item() > 0.15:
+    
+    if best_scale.detach().item() > max_vaf:
         return torch.min(VAF) - 1e-10
     else:
         return best_scale - 1e-10
+    
+def initialize_subclone(VAF, karyo, purity, K_number, tail, subclones):
+    
+    km = KMeans(K_number).fit(VAF.numpy().reshape(-1, 1))
+    
+    sorted_centroids = np.sort(np.array(km.cluster_centers_.flatten()))
+    
+       
+    idx_left = tail
+    idx_right = idx_left + subclones
+     
+    subclonal_centroid =  torch.tensor(sorted_centroids[idx_left:idx_right])
+    
+    
+    
+    subclonal_centroid = (subclonal_centroid  * (purity * karyo + (1 - purity) * 2)) / purity
+    
+    if(torch.sum(subclonal_centroid > 0.9)) > 0: 
+        subclonal_centroid[subclonal_centroid > 0.9] = 1 / torch.arange(start=2, end = torch.sum(subclonal_centroid > 0.9) + 2)
+        
+    
+    return subclonal_centroid
+

@@ -20,17 +20,23 @@ def fit_mobster(data, K, tail=1, truncated_pareto=True, subclonal_prior="Moyal",
                 number_of_trials_clonal_mean=500., number_of_trials_k=300.,
                 number_of_trials_subclonal=500,
                 alpha_precision_concentration=5, alpha_precision_rate=0.1,
-                prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], stopping=all_stopping_criteria, lr=0.05,
+                prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.],max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.1,stopping=all_stopping_criteria, lr=0.05,
                 max_it=5000, e=0.001, compile=False, CUDA=False, seed=3, lrd_gamma=0.1):
+    
     pyro.set_rng_seed(seed)
 
     if CUDA:
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        data = {k:v.cuda() for k,v in data.items()}
+    else:
+      torch.set_default_tensor_type('torch.FloatTensor')
 
     if compile:
         loss = pyro.infer.JitTrace_ELBO
+        
     else:
         loss = pyro.infer.Trace_ELBO
+        
 
     model = mobster.model
     guide = mobster.guide
@@ -61,16 +67,19 @@ def fit_mobster(data, K, tail=1, truncated_pareto=True, subclonal_prior="Moyal",
         'number_of_trials_k': number_of_trials_k,
         'prior_lims_clonal': prior_lims_clonal,
         'prior_lims_k': prior_lims_k,
-        'number_of_trials_subclonal' : number_of_trials_subclonal
+        'number_of_trials_subclonal' : number_of_trials_subclonal,
+        "max_min_subclonal_ccf" : max_min_subclonal_ccf,
+        "k_means_init" : k_means_init,
+        "min_vaf_scale_tail" : min_vaf_scale_tail
     }
     loss = run(data, params, svi, stopping, max_it, e)
 
-    params_dict = ms.retrieve_params()
+    params_dict = ms.retrieve_params(CUDA)
     # params_dict = include_ccf(data, params_dict_noccf, K,purity)
     print("", flush=True, end="")
     print("Computing cluster assignements.", flush=True)
     params_dict, lk = retrieve_posterior_probs(data, truncated_pareto, params_dict, tail, purity, K, subclonal_prior,
-                                               multi_tail)
+                                               multi_tail, min_vaf_scale_tail)
 
     ### Caclculate information criteria
     print("Computing information criteria.", flush=True)
