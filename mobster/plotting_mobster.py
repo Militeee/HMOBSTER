@@ -18,22 +18,18 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
     multi_tail =  inf_res['run_parameters']['multi_tail']
     subclonal_prior = inf_res['run_parameters']['subclonal_prior']
     truncated_pareto = inf_res['run_parameters']['truncated_pareto']
-    purity = inf_res['run_parameters']['purity']
     nKar = len(all_params)
     plt.rcParams["figure.figsize"] = (fig_height * nKar, fig_width * nKar)
     fig, axs = plt.subplots(nKar)
     karyos = list(data.keys())
 
-    major = [int(str(i).split(":")[0]) for i in karyos]
-    minor = [int(str(i).split(":")[1]) for i in karyos]
-    theoretical_num_clones = [mut.theo_clonal_list[kr] for kr in karyos]
-    theo_clonal_means = [torch.min(mut.theo_clonal_means_list[kr]) * purity for kr in karyos]
+    theoretical_num_clones = [mut.theo_clonal_num(kr, range = False) for kr in karyos]
+    theo_clonal_means = [torch.min(mut.theo_clonal_num(kr)) for kr in karyos]
     for i, kr in enumerate(data):
 
         params = all_params[kr]
         assignment_probs = params["mixture_probs"]
-        assignment = params["cluster_assignments"]
-        clusts = params["cluster_types"]
+
 
         data_mut = data[kr].detach().numpy()
         data_mut = data_mut[:,0] / data_mut[:,1]
@@ -72,7 +68,7 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
             if K > 0 and truncated_pareto and multi_tail:
                 for w in range(K + 1):
                     alpha = params["tail_shape"]
-                    nall = mut.theo_allele_list[kr]
+                    nall = mut.theo_clonal_tot(kr)
                     x = np.linspace(0.05, 1, 1000)
                     p = pareto.pdf(x, alpha * nall, scale=params["tail_scale"])
                     p[p < params["tail_higher"][w]] = 0
@@ -86,7 +82,7 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
 
             else:
                 alpha = params["tail_shape"]
-                nall = mut.theo_allele_list[kr]
+                nall = mut.theo_clonal_tot(kr)
                 x = np.linspace(0.05, 1, 1000)
                 p = pareto.pdf(x, alpha * nall, scale=params["tail_scale"]) * assignment_probs[0]
                 tot_p += p

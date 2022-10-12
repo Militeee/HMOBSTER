@@ -143,7 +143,6 @@ def calculate_lk_moyal_params(NV, DP, lower, loc, scale, b_max, K):
 
 def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, theo_clones, counts_clone, karyo,
                                        purity, K, subclonal_prior, multi_tails, min_vaf_scale_tail):
-    j = counts_clone[i]
     NV = data[:, 0]
     DP = data[:, 1]
     VAF = NV / DP
@@ -152,63 +151,35 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
     beta = 0
     pareto = 0
 
-    theo_peaks = (theo_clonal_means_list[karyo] * purity) / (2 * (1-purity) + theo_allele_list[karyo] * purity)
+
+
+    theo_peaks = ((theo_clonal_num(karyo)/theo_clonal_tot(karyo)) * purity - 1e-9) / (2 * (1 - purity) + theo_clonal_tot(karyo) * purity)
 
     if K > 0:
-        ccfs = (params["ccf_priors"] * purity) / (2 * (1-purity) + theo_allele_list[karyo] * purity)
-
-    if theo_clones[i] == 2:
-
-        beta = beta_lk(params['a_2'][:, j] * params['avg_number_of_trials_beta'][i],
-                       (1 - params['a_2'][:, j]) * params['avg_number_of_trials_beta'][i],
-                       len(params['a_2'][:, j]),
-                       NV, DP)
-        b_max = torch.amin(theo_peaks)
-        if tail:
-            if truncated_pareto:
-                b_max_tail = b_max
-                weights = torch.tensor(1)
-                if K > 0 and multi_tails:
-                    b_max_tail -= torch.max(ccfs)
-                    b_max_tail = torch.Tensor(list(flatten([[b_max_tail.detach().tolist()], ccfs.detach().tolist()])))
-                    b_max_tail[b_max_tail < (torch.min(VAF) - 1e-5)] = torch.min(VAF)
-                    weights = params["multitail_weights"][i, :]
-            else:
-                weights = torch.tensor(1)
-                b_max_tail = torch.tensor(0.999)
-
-            pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF, min_vaf_scale_tail),
-                                                   params['tail_mean'] * theo_allele_list[karyo], b_max_tail,
-                                                   weights, K, truncated_pareto, multi_tails)
+        ccfs = (params["ccf_priors"] * purity) / (2 * (1-purity) + theo_clonal_tot(karyo) * purity)
 
 
+    beta = beta_lk(params['a_{}'.format(i)] * params['avg_number_of_trials_beta'][i],
+                   (1 - params['a_{}'.format(i)]) * params['avg_number_of_trials_beta'][i],
+                   len(params['a_{}'.format(i)]),
+                   NV, DP)
+    b_max = torch.amin(theo_peaks)
+    if tail:
+        if truncated_pareto:
+            b_max_tail = b_max
+            weights = torch.tensor(1)
+            if K > 0 and multi_tails:
+                b_max_tail -= torch.max(ccfs)
+                b_max_tail = torch.Tensor(list(flatten([[b_max_tail.detach().tolist()], ccfs.detach().tolist()])))
+                b_max_tail[b_max_tail < (torch.min(VAF) - 1e-5)] = torch.min(VAF)
+                weights = params["multitail_weights"][i, :]
+        else:
+            weights = torch.tensor(1)
+            b_max_tail = torch.tensor(0.999)
 
-
-    else:
-
-        beta = beta_lk(params['a_1'][:, j] * params['avg_number_of_trials_beta'][i],
-                       (1 - params['a_1'][:, j]) * params['avg_number_of_trials_beta'][i],
-                       len(params['a_1'][:, j]),
-                       NV, DP)
-        b_max = theo_peaks.detach()
-        if tail:
-            if truncated_pareto:
-                b_max_tail = b_max
-                weights = torch.tensor(1)
-                if K > 0 and multi_tails:
-                    b_max_tail -= torch.max(ccfs)
-                    ccfs_list = [ccfs.detach().tolist()]
-                    b_max_tail = [b_max_tail.detach().tolist()]
-                    b_max_tail = torch.Tensor(list(flatten([b_max_tail, ccfs_list])))
-                    b_max_tail[b_max_tail < (torch.min(VAF) - 1e-5)] = torch.min(VAF)
-                    weights = params["multitail_weights"][i, :]
-            else:
-                weights = torch.tensor(1)
-                b_max_tail = torch.tensor(0.999)
-
-            pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF, min_vaf_scale_tail),
-                                                   params['tail_mean'] * theo_allele_list[karyo], b_max_tail,
-                                                   weights, K, truncated_pareto, multi_tails)
+        pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF, min_vaf_scale_tail),
+                                               params['tail_mean'], b_max_tail,
+                                               weights, K, truncated_pareto, multi_tails)
 
     if K > 0:
         if subclonal_prior == "Moyal":
@@ -226,19 +197,19 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
     if tail and (K > 0):
 
         not_neutral = torch.vstack([beta, subclonal_lk]) + \
-                      torch.log(params['param_weights_{}'.format(theo_clones[i])][j, :]).reshape(
+                      torch.log(params['param_weights_{}'.format(theo_clones[i])]).reshape(
                           [K + theo_clones[i], -1])
         lk = final_lk(pareto, not_neutral, params['param_tail_weights'][i, :])
     if tail and not (K > 0):
-        not_neutral = beta + torch.log(params['param_weights_{}'.format(theo_clones[i])][j, :]).reshape(
+        not_neutral = beta + torch.log(params['param_weights_{}'.format(theo_clones[i])]).reshape(
                           [theo_clones[i], -1])
         lk = final_lk(pareto, not_neutral, params['param_tail_weights'][i, :])
     if not tail and (K > 0):
         lk = torch.vstack([beta, subclonal_lk]) + torch.log(
-            params['param_weights_{}'.format(theo_clones[i])][j, :].reshape(
+            params['param_weights_{}'.format(theo_clones[i])].reshape(
                 [K + theo_clones[i], -1]))
     if not tail and not (K > 0):
-        lk = beta + torch.log(params['param_weights_{}'.format(theo_clones[i])][j, :]).reshape(
+        lk = beta + torch.log(params['param_weights_{}'.format(theo_clones[i])]).reshape(
                           [theo_clones[i], -1])
 
     return lk

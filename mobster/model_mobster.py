@@ -8,8 +8,8 @@ import mobster.utils_mobster as mut
 @config_enumerate
 def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", multi_tail=False, purity=0.96,
           number_of_trials_clonal_mean=500., number_of_trials_subclonal=300, number_of_trials_k=300.,
-          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration=2,
-          alpha_precision_rate=0.01, epsilon_ccf=0.002, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.1):
+          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration=100,
+          alpha_precision_rate=0.1, epsilon_ccf=0.002, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.1):
     """Hierarchical bayesian model for Subclonal Deconvolution
 
     This model deconvolves the signal from the Variant Allelic Frequency (VAF) spectrum using a sound
@@ -69,19 +69,14 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
     # Split major and minor allele
     karyos = list(data.keys())
 
-    # Initialize means as they are into conditional block
-    betas_subclone_mean2 = 0
-    betas_subclone_n_samples2 = 0
-    betas_subclone_mean = 0
-    betas_subclone_n_samples = 0
 
     # Here we calculate the theoretical number of clonal clusters
-    theoretical_num_clones = [mut.theo_clonal_list[kr] for kr in karyos]
+    theoretical_num_clones = [mut.theo_clonal_num(kr, range = False) for kr in karyos]
 
     # Calculate the theoretical clonal means, wihch can be analytically defined for simple karyotypes, and then multiply them by the ploidy
-    theoretical_clonal_means = [mut.theo_clonal_means_list[kr] for kr in karyos]
+    theoretical_clonal_means = [mut.theo_clonal_num(kr) for kr in karyos]
 
-    theo_allele_list = [mut.theo_allele_list[kr] for kr in karyos]
+    theo_allele_list = [mut.theo_clonal_tot(kr) for kr in karyos]
 
     # Count how many karyotypes we have in our dataset for each theoretical number of clones
     counts_clones = dict()
@@ -111,7 +106,8 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
         VAF = NV / DP
 
 
-        theo_peaks = (theoretical_clonal_means[kr] * purity) / (2 * (1 - purity) + theo_allele_list[kr] * purity)
+        theo_peaks = (theoretical_clonal_means[kr] * purity - 1e-9) / (2 * (1 - purity) + theo_allele_list[kr] * purity)
+
 
         prior_overdispersion = pyro.sample('prior_overdisp_{}'.format(kr),
                                            dist.Uniform(prior_lims_clonal[0], prior_lims_clonal[1]))
@@ -121,23 +117,26 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
         weights = pyro.sample('weights_{}'.format(kr), dist.Dirichlet(torch.ones(K + theoretical_num_clones[kr])))
 
         # Here we initialize both the clonal beta clusters
-        with pyro.plate("clones_{}".format(kr), theoretical_num_clones[kr]):
+        with pyro.plate("clones_{}".format(kr)):
+
 
             # Number of sucessful trials for beta means prior
-            bm_1 = torch.tensor(theo_peaks.tolist()) * purity * number_of_trials_clonal_mean
+            bm_1 = theo_peaks.reshape([theoretical_num_clones[kr], 1]) * number_of_trials_clonal_mean
 
             # Number of unsucessful trials for beta means prior
             bm_2 = number_of_trials_clonal_mean - bm_1
             # As we are writing a bayesian model, beta clonal means prior are actually around
             # the theoretical values
-            betas_clone_mean = pyro.sample('beta_clone_mean_{}'.format(kr), dist.Beta(bm_1, bm_2))
+            betas_clone_mean = pyro.sample('beta_clone_mean_{}'.format(kr), dist.Beta(bm_1, bm_2).to_event(1))
+
+
 
             betas_clone_n_samples = pyro.sample('beta_clone_n_samples_{}'.format(kr),
                                                 dist.LogNormal(torch.log(prior_overdispersion),
                                                                1 / prec_overdispersion))
 
         if K > 0:
-            with pyro.plate("subclones_{}".format(kr), K):
+            with pyro.plate("subclones_{}".format(kr)):
                 adj_ccf = (subclonal_ccf * purity) / (2 * (1 - purity) + theo_allele_list[kr] * purity)
                 k_means = pyro.sample('beta_subclone_mean_{}'.format(kr),
                                       dist.Uniform(
@@ -146,20 +145,22 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
                                           ((subclonal_ccf + epsilon_ccf) * purity) / (
                                                       2 * (1 - purity) + theo_allele_list[kr] * purity)))
 
+
                 if subclonal_prior == "Moyal":
-                    scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Normal(0, 5))
+                    scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Normal(0 * torch.ones(K), 10))
                     subclone_mean = pyro.sample("subclones_prior_{}".format(kr),
                                                 BoundedMoyal(k_means, torch.exp(scale_subclonal), torch.min(VAF) - 1e-5,
-                                                             torch.amin(theo_peaks)))
-                    # subclone_mean = pyro.sample("subclones_prior_{}".format(kr),Moyal(k_means, scale_subclonal))
+                                                             torch.min(theo_peaks)).to_event(1))
+
+                    #subclone_mean = pyro.sample("subclones_prior_{}".format(kr),Moyal(k_means, scale_subclonal))
                 else:
                     num_trials_subclonal = pyro.sample("N_subclones_{}".format(kr),
-                                                       dist.Uniform(prior_lims_k[0], prior_lims_k[1]))
+                                                       dist.Uniform(prior_lims_k[0] * torch.ones(K), prior_lims_k[1] * torch.ones(K)))
                     subclone_mean = pyro.sample("subclones_prior_{}".format(kr),
                                                 dist.Beta(k_means * num_trials_subclonal,
                                                           (1 - k_means) * num_trials_subclonal))
 
-        if (tail == 1):
+        if (tail > 0):
             # Tail vs no tail probability, Dirichlet priors can sometimes create problems, but no better solution
             tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.tensor([1, 1 + K])))
 
@@ -194,6 +195,8 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
             if K > 0:
                 has_subclones = True
                 if subclonal_prior == "Moyal":
+
+
                     subclonal_lk = moyal_lk(subclone_mean, K, NV, DP)
                 else:
                     subclonal_lk = beta_lk(subclone_mean * num_trials_subclonal,

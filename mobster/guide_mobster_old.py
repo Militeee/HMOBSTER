@@ -55,10 +55,8 @@ def guide_old(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moya
     
     VAFS_by_karyo = { k:(v[:,0] / v[:,1]) for k,v in data.items() }
 
-    if k_means_init and K > 0:
-        print([ initialize_subclone(v, theo_allele_list[k], purity, subclones + tail, tail, subclones) for v,k VAFS_by_karyo.items() ])
-
-        ccf_init = torch.hstack([ initialize_subclone(v, theo_allele_list[k], purity, subclones + tail, tail, subclones) for v,k VAFS_by_karyo.items() ])
+    if k_means_init and K :
+        ccf_init = torch.hstack([ initialize_subclone(v, theo_allele_list[k], purity, K + tail, tail, K) for v,k in VAFS_by_karyo.items()])
     else:
         ccf_init = ((torch.min(torch.tensor(1)) - 0.001) / (K + 1)) * torch.arange(1,K+1)
 

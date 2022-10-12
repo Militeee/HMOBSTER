@@ -6,39 +6,23 @@ import numpy as np
 from scipy.signal import find_peaks
 from sklearn.cluster import KMeans
 
+try:
+    from typing import Iterable
+except ImportError:
+    from collections import Iterable
 
 
-theo_clonal_list = {
-    "1:0" : 1,
-    "1:1" : 1,
-    "2:0" : 2,
-    "2:1" : 2,
-    "2:2" : 2
-}
+def theo_clonal_num(kr, range = True):
+    kr = kr.split(":")
+    kr = [int(k) for k in kr]
+    if range:
+        return torch.arange(1, max(kr) + 1)
+    return max(kr)
 
-theo_allele_list = {
-    "1:0" : 1,
-    "1:1" : 2,
-    "2:0" : 2,
-    "2:1" : 3,
-    "2:2" : 4
-}
-
-theo_clonal_means_list = {
-    "1:0" : torch.tensor(1.),
-    "1:1" : torch.tensor(1.),
-    "2:0" : torch.tensor([1.,2.]),
-    "2:1" : torch.tensor([1.,2.]),
-    "2:2" : torch.tensor([1.,2.])
-}
-
-ccf_adjust =  {
-    "1:0" : torch.tensor(1),
-    "1:1" : torch.tensor(0.5),
-    "2:0" : torch.tensor(0.5),
-    "2:1" : torch.tensor(1/3.),
-    "2:2" : torch.tensor(0.25)
-}
+def theo_clonal_tot(kr):
+    kr = kr.split(":")
+    kr = [int(k) for k in kr]
+    return sum(kr)
 
 
 def flatten_list(l):
@@ -52,7 +36,7 @@ def log_sum_exp(args):
 
 def get_theo_clones(data):
     karyos = list(data.keys())
-    theoretical_num_clones = [theo_clonal_list[kr] for kr in karyos]
+    theoretical_num_clones = [theo_clonal_num(kr, range = False) for kr in karyos]
     return theoretical_num_clones
 
 def get_clones_counts(theoretical_num_clones):
@@ -93,18 +77,14 @@ def format_parameters_for_export(data, params, tail, K, purity, truncated_pareto
 
 def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clone, tail, K, purity, truncated_pareto, subclonal_prior, multi_tails):
 
-    j = counts_clone[i]
-    if theo_clones[i] == 2:
-        beta_concentration1 = params['a_2'][:,j] * params['avg_number_of_trials_beta'][i]
-        beta_concentration2 = (1 - params['a_2'][:,j]) * params['avg_number_of_trials_beta'][i]
-    else:
-        beta_concentration1 = params['a_1'][:, j] * params['avg_number_of_trials_beta'][i]
-        beta_concentration2 = (1 - params['a_1'][:, j]) * params['avg_number_of_trials_beta'][i]
+    beta_concentration1 = params['a_{}'.format(i)] * params['avg_number_of_trials_beta'][i]
+    beta_concentration2 = (1 - params['a_{}'.format(i)]) * params['avg_number_of_trials_beta'][i]
 
-    mixture_weights = params['param_weights_{}'.format(theo_clones[i])][j, :].detach().numpy()
+
+    mixture_weights = params['param_weights_{}'.format(theo_clones[i])].detach().numpy()
 
     if K > 0:
-        ccfs_torch = (params["ccf_priors"] * purity) / (2 * (1 - purity) + theo_allele_list[k] * purity)
+        ccfs_torch = (params["ccf_priors"] * purity) / (2 * (1 - purity) + theo_clonal_tot(k) * purity)
         ccfs = [ccfs_torch.detach().tolist()]
 
     if tail == 1:
@@ -112,9 +92,9 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
         mixture_weights = mixture_weights * tail_weights[1]
         mixture_weights = np.insert(mixture_weights, 0, tail_weights[0])
 
-        if theo_clones[i] == 2:
+        if theo_clones[i] > 1:
             if truncated_pareto:
-                b_max = torch.amin(params['a_2'][0:1,j])
+                b_max = torch.amin(params['a_{}'.format(i)])
                 if K > 0 and multi_tails:
                     bm = [b_max.detach().tolist()]
                     b_max = torch.Tensor(list(flatten([bm, ccfs])))
@@ -123,7 +103,7 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
                 b_max = torch.tensor(0.999)
         else:
             if truncated_pareto:
-                b_max = params['a_1'][0, j]
+                b_max = params['a_{}'.format(i)][0]
                 if K > 0 and multi_tails:
                     b_max -=  torch.amax(ccfs_torch).item()
                     bm = [b_max.detach().tolist()]
@@ -158,7 +138,7 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
     if tail == 1:
         res["tail_shape"] = params['tail_mean'].detach().numpy()
         res["tail_scale"] = scale_pareto(VAF).detach().numpy()
-        res["tail_noise"] =  1/params['alpha_noise'][i].detach().numpy()
+        res["tail_noise"] =  1/params['alpha_noise'].detach().numpy()
         res["tail_higher"] = b_max.detach().numpy()
         if K > 0 and truncated_pareto and multi_tails:
             res["multi_tail_weights"] = params['multitail_weights'][i].detach().numpy()
@@ -194,35 +174,6 @@ def rename_clusters(x,tail, theo_c, K):
         subclonal_num += 1
 
     return res,np.array(order_vec)
-
-
-
-def include_ccf(data, params, K, purity):
-
-    if K == 0:
-        return params
-    kar = list(data.keys())
-    cccfs_2 = [ccf_adjust[k] * purity for k in kar if theo_clonal_list[k] == 2]
-    cccfs_1 = [ccf_adjust[k] * purity for k in kar if theo_clonal_list[k] == 1]
-
-    correct_ccfs2 = torch.tensor(cccfs_2)
-    correct_ccfs1 = torch.tensor(cccfs_1)
-
-    ccf_cat2 = torch.outer(params["ccf_priors"], correct_ccfs2)
-    ccf_cat1 = torch.outer(params["ccf_priors"], correct_ccfs1)
-
-    if "a_2" in params:
-        params['a_2'] = torch.cat([params['a_2'], ccf_cat2.reshape([K,-1]) ], 0)
-    if "a_1" in params:
-        params['a_1'] = torch.cat([params['a_1'], ccf_cat1.reshape([K,-1]) ], 0)
-
-    return params
-
-try:
-    from typing import Iterable
-except ImportError:
-    from collections import Iterable
-
 
 
 
@@ -300,4 +251,10 @@ def initialize_subclone(VAF, karyo, purity, K_number, tail, subclones):
         
     
     return subclonal_centroid
+
+def to_cpu(tns):
+    if type(tns) is dict:
+        (tn.to("cpu") for tn in tns.values())
+    else:
+        tns.cpu()
 
