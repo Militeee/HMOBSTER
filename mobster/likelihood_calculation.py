@@ -185,7 +185,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
         if subclonal_prior == "Moyal":
             scale = params["scale_subclonal_{}".format(i)]
             subclonal_lk = calculate_lk_moyal_params(NV, DP, torch.min(VAF) - 1e-5,
-                                                     ccfs, torch.exp(scale), b_max,
+                                                     ccfs, 1/scale, b_max,
                                                      K)
         else:
             n_trials = params["n_trials_subclonal_{}".format(i)]

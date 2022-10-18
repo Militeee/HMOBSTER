@@ -13,7 +13,7 @@ from mobster.likelihood_calculation import *
 
 def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",multi_tail = False,  purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
           number_of_trials_subclonal=300., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision_concentration = 100, alpha_precision_rate=0.1,
-          prior_lims_k=[1., 10000.], epsilon_ccf = 0.002, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.01):
+          prior_lims_k=[1., 10000.], epsilon_ccf = 0.01, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.01):
 
 
     karyos = list(data.keys())
@@ -32,7 +32,7 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
         counts_clones[i] = counts_clones.get(i, 0) + 1
 
     
-    if truncated_pareto and K > 0:
+    if truncated_pareto and K > 0 and multi_tail:
         multitail_weights = pyro.param("multitail_weights", 1 / (K + 1) * torch.ones([len(karyos), K + 1]),  constraint=constraints.simplex)
 
     a_prior = pyro.param("tail_mean", torch.ones(1), constraint=constraints.positive)
@@ -114,11 +114,11 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
                                                    ((subclonal_ccf + epsilon_ccf)  * purity)/ (2 * (1-purity) + theo_allele_list[kr] * purity)))
 
                 if subclonal_prior == "Moyal":
-                    scale_subclonal_param = pyro.param("scale_subclonal_{}".format(kr), torch.ones(K) * -5,
+                    scale_subclonal_param = pyro.param("scale_subclonal_{}".format(kr), torch.tensor(100.),
                                                        constraint=constraints.real)
                     scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Delta(scale_subclonal_param))
                     pyro.sample("subclones_prior_{}".format(kr),
-                                                BoundedMoyal(k_means, torch.exp(scale_subclonal), torch.min(torch.amin(VAF), torch.tensor(min_vaf_scale_tail)) - 1e-5,
+                                                BoundedMoyal(k_means - 1./scale_subclonal * (EULER_MASCHERONI + torch.log(torch.tensor(2))) , 1./scale_subclonal, torch.min(torch.amin(VAF), torch.tensor(min_vaf_scale_tail)) - 1e-5,
                                                              torch.amin(theo_peaks)).to_event(1))
                     ba = BoundedMoyal(k_means, torch.exp(scale_subclonal), torch.min(torch.amin(VAF), torch.tensor(min_vaf_scale_tail)) - 1e-5,
                                                              torch.amin(theo_peaks))

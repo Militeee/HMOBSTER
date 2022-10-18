@@ -9,7 +9,7 @@ import mobster.utils_mobster as mut
 def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", multi_tail=False, purity=0.96,
           number_of_trials_clonal_mean=500., number_of_trials_subclonal=300, number_of_trials_k=300.,
           prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration=100,
-          alpha_precision_rate=0.1, epsilon_ccf=0.002, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.1):
+          alpha_precision_rate=0.1, epsilon_ccf=0.01, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.1):
     """Hierarchical bayesian model for Subclonal Deconvolution
 
     This model deconvolves the signal from the Variant Allelic Frequency (VAF) spectrum using a sound
@@ -147,9 +147,9 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
 
 
                 if subclonal_prior == "Moyal":
-                    scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Normal(0 * torch.ones(K), 10))
+                    scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Gamma(10. * torch.ones(K), .1))
                     subclone_mean = pyro.sample("subclones_prior_{}".format(kr),
-                                                BoundedMoyal(k_means, torch.exp(scale_subclonal), torch.min(VAF) - 1e-5,
+                                                BoundedMoyal(k_means - 1./scale_subclonal * (EULER_MASCHERONI + torch.log(torch.tensor(2))) , 1/scale_subclonal, torch.min(VAF) - 1e-5,
                                                              torch.min(theo_peaks)).to_event(1))
 
                     #subclone_mean = pyro.sample("subclones_prior_{}".format(kr),Moyal(k_means, scale_subclonal))
@@ -162,7 +162,7 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
 
         if (tail > 0):
             # Tail vs no tail probability, Dirichlet priors can sometimes create problems, but no better solution
-            tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.tensor([1, 1 + K])))
+            tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.tensor([1., 1. + K])))
 
             alpha_precision = pyro.sample('alpha_precision_{}'.format(kr),
                                           dist.Gamma(concentration=alpha_precision_concentration,
