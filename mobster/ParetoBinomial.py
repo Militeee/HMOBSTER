@@ -6,7 +6,7 @@ import torch
 
 class ParetoBinomial(TorchDistribution):
     has_rsample = False
-    arg_constraints = {"alpha": constraints.positive,
+    arg_constraints = {"alpha": constraints.positive,"lower_lim": constraints.positive,
                        "upper_limit": constraints.positive, "trials": constraints.positive_integer}
 
     def __init__(self, alpha, upper_limit, lower_lim, trials, validate_args=False):
@@ -34,12 +34,23 @@ class ParetoBinomial(TorchDistribution):
 
         x = torch.linspace(z1, z2, 120).reshape([120, -1])
         y = a*torch.log(x) + b*torch.log((1 - x))
-        y = (y + self.combo(self.trials, value)).exp()
+        y = y +  self.combo(self.trials, value)
+        #print(y)
+        inf_sup_val = torch.logsumexp(torch.logsumexp(torch.cat([y[0:-1].unsqueeze(-1),y[1:].unsqueeze(-1)],2),2),0) + torch.log((x[1]-x[0]) / 2) 
+        #print(inf_sup_val)
+        #print( torch.logsumexp(torch.vstack([y[0:-1], y[1:]]),0) + torch.log((x[1]-x[0]) * (len(y) - 1) / 2) )
+        
+        #x = torch.linspace(z1, z2, 120).reshape([120, -1])
+        #y = a*torch.log(x) + b*torch.log((1 - x))
+        #y = (y + self.combo(self.trials, value)).exp()
+        
+        
 
 
-        inf_sup_val = torch.trapz(y, x, dim=0)
-
-        return torch.log(inf_sup_val)
+        #inf_sup_val = torch.trapz(y, x, dim=0)
+        
+        #return torch.log(inf_sup_val)
+        return inf_sup_val 
 
     def combo(self, n, k):
         return (n + 1).lgamma() - (k + 1).lgamma() - ((n - k) + 1).lgamma()

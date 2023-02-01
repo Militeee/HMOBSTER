@@ -29,7 +29,7 @@ def fit_mobster(data, K, tail=1, truncated_pareto=True, subclonal_prior="Moyal",
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
         data = {k:v.cuda() for k,v in data.items()}
     else:
-      torch.set_default_tensor_type('torch.FloatTensor')
+        torch.set_default_tensor_type('torch.FloatTensor')
 
     if compile:
         loss = pyro.infer.JitTrace_ELBO

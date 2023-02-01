@@ -81,7 +81,7 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
     beta_concentration2 = (1 - params['a_{}'.format(i)]) * params['avg_number_of_trials_beta'][i]
 
 
-    mixture_weights = params['param_weights_{}'.format(theo_clones[i])].detach().numpy()
+    mixture_weights = params['param_weights_{}'.format(i)].detach().numpy()
 
     if K > 0:
         ccfs_torch = (params["ccf_priors"] * purity) / (2 * (1 - purity) + theo_clonal_tot(k) * purity)
@@ -131,12 +131,12 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
         res["ccf_subclones"] = params["ccf_priors"].detach().numpy()
         res["loc_subclones"] = ccfs_torch.detach().numpy()
         if subclonal_prior == "Moyal":
-            res["n"] = (1./params["scale_subclonal_{}".format(i)]).reshape([K]).detach().numpy()
+            res["scale_subclonal"] = (1./params["scale_subclonal_{}".format(i)]).reshape([K]).detach().numpy()
         else:
             res["n_trials_subclonal"] = params["n_trials_subclonal_{}".format(i)].detach().numpy()
 
     if tail == 1:
-        res["tail_shape"] = params['tail_mean'].detach().numpy()
+        res["tail_shape"] = np.exp(params['tail_mean'].detach().numpy())
         res["tail_scale"] = scale_pareto(VAF).detach().numpy()
         res["tail_noise"] =  (1/params['alpha_noise']).detach().numpy()
         res["tail_higher"] = b_max.detach().numpy()

@@ -110,7 +110,6 @@ def calculate_lk_multitail_params_old(NV, DP, lower, tail, b_max, weights, K, tr
 def calculate_lk_multitail_params(NV, DP, lower, tail, b_max, weights, K, truncated_pareto, multi_tails):
 
     if K == 0 or not truncated_pareto or not multi_tails:
-
         return ParetoBinomial(tail, b_max, lower, trials=DP).log_prob(NV)
 
     lk = torch.zeros(K + 1, len(NV))
@@ -153,7 +152,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
 
 
 
-    theo_peaks = ((theo_clonal_num(karyo)/theo_clonal_tot(karyo)) * purity - 1e-9) / (2 * (1 - purity) + theo_clonal_tot(karyo) * purity)
+    theo_peaks = (theo_clonal_num(karyo) * purity - 1e-9) / (2 * (1 - purity) + theo_clonal_tot(karyo) * purity)
 
     if K > 0:
         ccfs = (params["ccf_priors"] * purity) / (2 * (1-purity) + theo_clonal_tot(karyo) * purity)
@@ -178,7 +177,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
             b_max_tail = torch.tensor(0.999)
 
         pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF, min_vaf_scale_tail),
-                                               params['tail_mean'], b_max_tail,
+                                               torch.exp(params['tail_mean']), b_max_tail,
                                                weights, K, truncated_pareto, multi_tails)
 
     if K > 0:
@@ -194,22 +193,23 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
                                    K,
                                    NV, DP)
 
+
     if tail and (K > 0):
 
         not_neutral = torch.vstack([beta, subclonal_lk]) + \
-                      torch.log(params['param_weights_{}'.format(theo_clones[i])]).reshape(
+                      torch.log(params['param_weights_{}'.format(i)]).reshape(
                           [K + theo_clones[i], -1])
         lk = final_lk(pareto, not_neutral, params['param_tail_weights'][i, :])
     if tail and not (K > 0):
-        not_neutral = beta + torch.log(params['param_weights_{}'.format(theo_clones[i])]).reshape(
+        not_neutral = beta + torch.log(params['param_weights_{}'.format(i)]).reshape(
                           [theo_clones[i], -1])
         lk = final_lk(pareto, not_neutral, params['param_tail_weights'][i, :])
     if not tail and (K > 0):
         lk = torch.vstack([beta, subclonal_lk]) + torch.log(
-            params['param_weights_{}'.format(theo_clones[i])].reshape(
+            params['param_weights_{}'.format(i)].reshape(
                 [K + theo_clones[i], -1]))
     if not tail and not (K > 0):
-        lk = beta + torch.log(params['param_weights_{}'.format(theo_clones[i])]).reshape(
+        lk = beta + torch.log(params['param_weights_{}'.format(i)]).reshape(
                           [theo_clones[i], -1])
 
     return lk

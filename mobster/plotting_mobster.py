@@ -85,6 +85,9 @@ def plot_results(data, inf_res, bins=50, output = "results.png",fig_height = 4, 
                 nall = mut.theo_clonal_tot(kr)
                 x = np.linspace(0.05, 1, 1000)
                 p = pareto.pdf(x, alpha * nall, scale=params["tail_scale"]) * assignment_probs[0]
+                if truncated_pareto:
+                    p[x > params["tail_higher"]] = 0
+                    p = p / np.trapz(p,x)
                 tot_p += p
                 if nKar == 1:
                     axs.plot(x, p, linewidth=1.5, color="tab:pink")

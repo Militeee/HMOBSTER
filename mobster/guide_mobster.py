@@ -35,7 +35,7 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
     if truncated_pareto and K > 0 and multi_tail:
         multitail_weights = pyro.param("multitail_weights", 1 / (K + 1) * torch.ones([len(karyos), K + 1]),  constraint=constraints.simplex)
 
-    a_prior = pyro.param("tail_mean", torch.ones(1), constraint=constraints.positive)
+    a_prior = pyro.param("tail_mean", torch.zeros(1) + 0.1, constraint=constraints.real)
 
     alpha_precision_par = pyro.param("alpha_noise",
                                      dist.Gamma(concentration=alpha_precision_concentration,
@@ -91,7 +91,6 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
 
         theo_peaks = (theoretical_clonal_means[kr] * purity - 1e-9) / (2 * (1 - purity) + theo_allele_list[kr] * purity)
 
-
         # Mean parameter
         a_theo = theo_peaks
 
@@ -114,7 +113,7 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
                                                    ((subclonal_ccf + epsilon_ccf)  * purity)/ (2 * (1-purity) + theo_allele_list[kr] * purity)))
 
                 if subclonal_prior == "Moyal":
-                    scale_subclonal_param = pyro.param("scale_subclonal_{}".format(kr), torch.tensor(100.),
+                    scale_subclonal_param = pyro.param("scale_subclonal_{}".format(kr), torch.tensor(100.) * torch.ones(K),
                                                        constraint=constraints.real)
                     scale_subclonal = pyro.sample("scale_moyal_{}".format(kr), dist.Delta(scale_subclonal_param))
                     pyro.sample("subclones_prior_{}".format(kr),
@@ -140,8 +139,9 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
             pyro.sample('weights_tail_{}'.format(kr), dist.Delta(weights_tail[kr]).to_event(1))
 
             alpha_precision = pyro.sample('alpha_precision_{}'.format(kr), dist.Delta(alpha_precision_par))
+            #alpha_prior = torch.clamp(alpha_prior, -100,100)
             pyro.sample("alpha_noise_{}".format(kr),
-                                dist.LogNormal(torch.log(alpha_prior),
+                                dist.LogNormal(alpha_prior,
                                                1 / alpha_precision))
 
 
