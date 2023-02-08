@@ -5,7 +5,7 @@ from setuptools import setup
 #        return f.read()
 
 setup(name='HMOBSTER',
-      version='0.0.43',
+      version='0.0.44',
       description='VAF clustering for multiple karyotypes',
       url='https://github.com/Militeee/hmobster',
       author='Salvatore Milite',
