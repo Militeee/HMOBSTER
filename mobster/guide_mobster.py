@@ -12,7 +12,7 @@ from mobster.likelihood_calculation import *
 
 
 def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",multi_tail = False,  purity=0.96, clonal_beta_var=1., number_of_trials_clonal_mean=100.,
-          number_of_trials_subclonal=300., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision_concentration = 100, alpha_precision_rate=0.1,
+          number_of_trials_subclonal=300., number_of_trials_k=300., prior_lims_clonal=[1., 10000.],alpha_precision = 1., alpha_mean=1.,
           prior_lims_k=[1., 10000.], epsilon_ccf = 0.01, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.01):
 
 
@@ -35,12 +35,12 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
     if truncated_pareto and K > 0 and multi_tail:
         multitail_weights = pyro.param("multitail_weights", 1 / (K + 1) * torch.ones([len(karyos), K + 1]),  constraint=constraints.simplex)
 
-    a_prior = pyro.param("tail_mean", torch.zeros(1) + 0.1, constraint=constraints.real)
+    #a_prior = pyro.param("tail_mean", torch.ones(1), constraint=constraints.real)
 
-    alpha_precision_par = pyro.param("alpha_noise",
-                                     dist.Gamma(concentration=alpha_precision_concentration,
-                                                rate=alpha_precision_rate).mean,
-                                     constraint=constraints.positive)
+    #alpha_precision_par = pyro.param("alpha_noise",
+    #                                 dist.Gamma(concentration=alpha_precision_concentration,
+    #                                            rate=alpha_precision_rate).mean,
+    #                                 constraint=constraints.positive)
 
 
 
@@ -49,8 +49,10 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
     precision_number_of_trials_beta = pyro.param("prc_number_of_trials_beta", torch.ones(len(karyos)) * 20, constraint=constraints.positive)
 
 
-    alpha_prior = pyro.sample('u', dist.Delta(a_prior))
+    #pyro.sample('u', dist.Delta(a_prior))
     
+    alpha_karyo = pyro.param("tail_mean", torch.ones([len(karyos)]) , constraint=constraints.positive)
+
     first_kar = list(data.keys())[0]
     
     VAFS_init = data[first_kar]
@@ -137,12 +139,13 @@ def guide(data, K=1, tail=1, truncated_pareto = True,subclonal_prior = "Moyal",m
         if tail == 1:
             # K = K + tail
             pyro.sample('weights_tail_{}'.format(kr), dist.Delta(weights_tail[kr]).to_event(1))
-
-            alpha_precision = pyro.sample('alpha_precision_{}'.format(kr), dist.Delta(alpha_precision_par))
+            #pyro.sample('alpha_precision_{}'.format(kr), dist.Delta(alpha_precision_par))
+            
             #alpha_prior = torch.clamp(alpha_prior, -100,100)
-            pyro.sample("alpha_noise_{}".format(kr),
-                                dist.LogNormal(alpha_prior,
-                                               1 / alpha_precision))
+            pyro.sample("alpha_pareto_{}".format(kr),
+                                dist.Delta(alpha_karyo[kr]))
+            
+           
 
 
 

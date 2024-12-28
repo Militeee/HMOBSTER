@@ -177,7 +177,7 @@ def compute_likelihood_from_params_aux(data, tail, truncated_pareto, params, i, 
             b_max_tail = torch.tensor(0.999)
 
         pareto = calculate_lk_multitail_params(NV, DP, scale_pareto(VAF, min_vaf_scale_tail),
-                                               torch.exp(params['tail_mean']), b_max_tail,
+                                               params['tail_mean'][i], b_max_tail,
                                                weights, K, truncated_pareto, multi_tails)
 
     if K > 0:

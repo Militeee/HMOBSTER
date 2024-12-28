@@ -8,8 +8,8 @@ import mobster.utils_mobster as mut
 @config_enumerate
 def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", multi_tail=False, purity=0.96,
           number_of_trials_clonal_mean=500., number_of_trials_subclonal=300, number_of_trials_k=300.,
-          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision_concentration=100,
-          alpha_precision_rate=0.1, epsilon_ccf=0.01, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.1):
+          prior_lims_clonal=[0.1, 100000.], prior_lims_k=[0.1, 100000.], alpha_precision=1.,
+          alpha_mean=1., epsilon_ccf=0.01, max_min_subclonal_ccf = [0.05,0.95], k_means_init = True, min_vaf_scale_tail = 0.1):
     """Hierarchical bayesian model for Subclonal Deconvolution
 
     This model deconvolves the signal from the Variant Allelic Frequency (VAF) spectrum using a sound
@@ -85,9 +85,11 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
 
     # Prior over the mean of the alphas
     if not multi_tail:
-        alpha_prior = pyro.sample('u', dist.Normal(0, 1))
+        #alpha_prior = pyro.sample('u', dist.Normal(0, 1))
+        alpha_prior =alpha_mean
     else:
-        alpha_prior = pyro.sample('u', dist.Normal(0, 0.1))
+        #alpha_prior = pyro.sample('u', dist.Normal(0, 0.1))
+        alpha_prior = alpha_mean
 
     # ccf_priors = ((torch.min(torch.tensor(1) * purity) - 0.001) / (K + 1)) * torch.arange(1,K+1)
     # subclonal_ccf = pyro.sample("sb_ccf", dist.Beta(ccf_priors * number_of_trials_k, (1-ccf_priors) * number_of_trials_k))
@@ -164,10 +166,10 @@ def model(data, K=1, tail=1, truncated_pareto=True, subclonal_prior="Moyal", mul
             # Tail vs no tail probability, Dirichlet priors can sometimes create problems, but no better solution
             tail_probs = pyro.sample('weights_tail_{}'.format(kr), dist.Dirichlet(torch.tensor([1., 1. + K])))
 
-            alpha_precision = pyro.sample('alpha_precision_{}'.format(kr),
-                                          dist.Gamma(concentration=alpha_precision_concentration,
-                                                     rate=alpha_precision_rate))
-            alpha = pyro.sample("alpha_noise_{}".format(kr),
+            #alpha_precision = pyro.sample('alpha_precision_{}'.format(kr),
+                                          #dist.Gamma(concentration=alpha_precision_concentration,
+                                                     #rate=alpha_precision_rate))
+            alpha = pyro.sample("alpha_pareto_{}".format(kr),
                                 dist.LogNormal(alpha_prior,
                                                1 / alpha_precision))
             if truncated_pareto:

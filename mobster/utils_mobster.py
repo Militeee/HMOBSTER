@@ -136,9 +136,9 @@ def format_parameters_for_export_aux(data, params,k, i, theo_clones, counts_clon
             res["n_trials_subclonal"] = params["n_trials_subclonal_{}".format(i)].detach().numpy()
 
     if tail == 1:
-        res["tail_shape"] = np.exp(params['tail_mean'].detach().numpy())
+        res["tail_shape"] =params['tail_mean'][i].detach().numpy()
         res["tail_scale"] = scale_pareto(VAF).detach().numpy()
-        res["tail_noise"] =  (1/params['alpha_noise']).detach().numpy()
+        #res["tail_noise"] =  (1/params['alpha_noise']).detach().numpy()
         res["tail_higher"] = b_max.detach().numpy()
         if K > 0 and truncated_pareto and multi_tails:
             res["multi_tail_weights"] = params['multitail_weights'][i].detach().numpy()
@@ -217,6 +217,7 @@ def collect_params_no_noise(pars):
     return(np.array(ret))
 
 def scale_pareto(VAF, max_vaf = 0.1):
+    return torch.min(VAF) - 1e-10
     NBINS = 100
     hist = torch.histc(VAF, NBINS, 0, 1)
     vals = torch.cumsum(1/NBINS * torch.ones(NBINS),0)

@@ -32,7 +32,8 @@ class ParetoBinomial(TorchDistribution):
         if z1 == 0 and z2 == 1:
             return self.lbeta(a, b)
 
-        x = torch.linspace(z1, z2, 120).reshape([120, -1])
+        POINTS = 200
+        x = torch.linspace(z1, z2, POINTS).reshape([POINTS, -1])
         y = a*torch.log(x) + b*torch.log((1 - x))
         y = y +  self.combo(self.trials, value)
         #print(y)
